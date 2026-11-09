@@ -1,0 +1,95 @@
+# Time and State: check-then-act on the file system, and temporary files with guessable names.
+rules:
+  - id: fortify.race-condition-file-system-access
+    languages: [javascript, typescript]
+    severity: INFO
+    message: >-
+      Race Condition: File System Access: existsSync($P) is followed by $M($P): the file can change
+      between the check and the use. Act and handle ENOENT instead.
+    metadata:
+      fortify:
+        category: "Race Condition: File System Access"
+        kingdom: Time and State
+        impact: "2.0"
+        probability: "1.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A file's existence is checked before it is used; the two are not atomic.
+      cwe: ["CWE-367"]
+      owasp: ["A04:2021 Insecure Design"]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if ($FS.existsSync($P)) $M($P, ...);
+          - pattern: |
+              if ($FS.existsSync($P)) $FS.$M($P, ...);
+          - pattern: |
+              if ($FS.existsSync($P)) { ... $M($P, ...); ... }
+          - pattern: |
+              if ($FS.existsSync($P)) { ... $FS.$M($P, ...); ... }
+          - pattern: |
+              if (existsSync($P)) $M($P, ...);
+          - pattern: |
+              if (existsSync($P)) { ... $M($P, ...); ... }
+          - pattern: 'existsSync($P) ? $M($P, ...) : $E'
+          - pattern: '$FS.existsSync($P) ? $M($P, ...) : $E'
+          - pattern: '$FS.existsSync($P) ? $FS.$M($P, ...) : $E'
+          - pattern: 'existsSync($P) && $M($P, ...)'
+          - pattern: '$FS.existsSync($P) && $FS.$M($P, ...)'
+          - pattern: |
+              if (!existsSync($P)) { ... }
+              ...
+              $M($P, ...);
+          - pattern: |
+              if (!$FS.existsSync($P)) { ... }
+              ...
+              $FS.$M($P, ...);
+          - pattern: |
+              if (!existsSync($P)) return ...;
+              ...
+              $M($P, ...);
+          - pattern: |
+              if (!$FS.existsSync($P)) return ...;
+              ...
+              $FS.$M($P, ...);
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(readFile|readFileSync|writeFile|writeFileSync|appendFile|appendFileSync|unlink|unlinkSync|rm|rmSync|rmdir|rmdirSync|mkdir|mkdirSync|open|openSync|createReadStream|createWriteStream|chmod|chmodSync|chown|chownSync|rename|renameSync|copyFile|copyFileSync|truncate|truncateSync|readdir|readdirSync)$
+
+  - id: fortify.insecure-temporary-file
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Insecure Temporary File: the temporary path is predictable, so another user on the machine can
+      plant or read it. Make a private directory with fs.mkdtemp and put the file there.
+    metadata:
+      fortify:
+        category: Insecure Temporary File
+        kingdom: Time and State
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A temporary file has a fixed, guessable name.
+      cwe: ["CWE-377"]
+      owasp: ["A01:2021 Broken Access Control"]
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: $J(tmpdir(), "$NAME", ...)
+                  - pattern: $J($OS.tmpdir(), "$NAME", ...)
+                  - pattern: $P.$J(tmpdir(), "$NAME", ...)
+                  - pattern: $P.$J($OS.tmpdir(), "$NAME", ...)
+              - metavariable-regex:
+                  metavariable: $J
+                  regex: ^(join|resolve)$
+          - patterns:
+              - pattern: '"$NAME"'
+              - metavariable-regex:
+                  metavariable: $NAME
+                  regex: '^(/tmp/|/var/tmp/|/dev/shm/|C:\\(Windows\\)?Temp\\).+'
+      - pattern-not-inside: mkdtemp(...)
+      - pattern-not-inside: mkdtempSync(...)
+      - pattern-not-inside: $FS.mkdtemp(...)
+      - pattern-not-inside: $FS.mkdtempSync(...)

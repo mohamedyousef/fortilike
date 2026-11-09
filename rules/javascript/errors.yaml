@@ -1,0 +1,113 @@
+# Errors: swallowed exceptions and error details that leak to the client or the log.
+rules:
+  - id: fortify.poor-error-handling-empty-catch-block
+    languages: [javascript, typescript]
+    severity: INFO
+    message: >-
+      Poor Error Handling: Empty Catch Block: the error is swallowed, so a failure here goes unnoticed.
+      Handle it, log it, or say in a comment why nothing is the right answer.
+    metadata:
+      fortify:
+        category: "Poor Error Handling: Empty Catch Block"
+        kingdom: Errors
+        impact: "1.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A catch block does nothing.
+      cwe: ["CWE-390"]
+      owasp: ["A09:2021 Security Logging and Monitoring Failures"]
+    pattern-either:
+      - pattern: |
+          try { ... } catch ($E) { }
+      - pattern: |
+          try { ... } catch { }
+      - pattern: |
+          try { ... } catch ($E) { } finally { ... }
+      - pattern: |
+          try { ... } catch { } finally { ... }
+      - pattern: $P.catch(() => { })
+      - pattern: $P.catch(($E) => { })
+      - pattern: $P.catch(function () { })
+      - pattern: $P.catch(function ($E) { })
+
+  - id: fortify.system-information-leak-external
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      System Information Leak: External: the response carries the error's message or stack trace, which
+      tells a client how the program is built (paths, modules, versions). Answer a generic message and
+      log the detail.
+    metadata:
+      fortify:
+        category: "System Information Leak: External"
+        kingdom: Encapsulation
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: An error's message or stack trace is sent to the client.
+      cwe: ["CWE-209", "CWE-497"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    patterns:
+      - pattern-either:
+          - pattern: $RES.$M(..., $E.stack, ...)
+          - pattern: $RES.$M(..., $E.message, ...)
+          - pattern: '$RES.$M(..., { ..., $K: $E.stack, ... }, ...)'
+          - pattern: '$RES.$M(..., { ..., $K: $E.message, ... }, ...)'
+          - pattern: $RES.$M(..., String($E), ...)
+          - pattern: $RES.$M(..., `...${$E.stack}...`, ...)
+          - pattern: $RES.$M(..., `...${$E.message}...`, ...)
+          - pattern: $RES.$M(..., `...${$E}...`, ...)
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(end|write|send|json|jsonp|render|status|type)$
+      - metavariable-pattern:
+          metavariable: $RES
+          patterns:
+            - pattern-either:
+                - pattern: $R
+                - pattern: $R.$CHAIN(...)
+                - pattern: $R.$CHAIN(...).$CHAIN2(...)
+                - pattern: $O.$R
+            - metavariable-regex:
+                metavariable: $R
+                regex: (?i)^(res|response|reply|rep)$
+      - metavariable-regex:
+          metavariable: $E
+          regex: (?i)^(e|err|error|ex|exc|exception|reason|cause|failure|problem)$
+
+  - id: fortify.system-information-leak-internal
+    languages: [javascript, typescript]
+    severity: INFO
+    message: >-
+      System Information Leak: Internal: the stack trace goes to the console or log, where it tells
+      anyone who reads it how the program is built. Log the message and a reference; keep the trace for
+      a debug level.
+    metadata:
+      fortify:
+        category: "System Information Leak: Internal"
+        kingdom: Encapsulation
+        impact: "1.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A stack trace is written to the console or log.
+      cwe: ["CWE-209", "CWE-532"]
+      owasp: ["A09:2021 Security Logging and Monitoring Failures"]
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: console.$M(..., $E.stack, ...)
+              - pattern: console.$M(..., `...${$E.stack}...`, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(log|info|warn|error|debug|trace)$
+      - patterns:
+          - pattern: $LOG.$M(..., $E.stack, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(log|info|warn|error|debug|trace)$
+          - metavariable-regex:
+              metavariable: $LOG
+              regex: (?i)^(log|logger|winston|pino|bunyan|this\.log|this\.logger)$
