@@ -1,0 +1,18 @@
+{
+  "name": "fortilike",
+  "version": "0.1.0",
+  "description": "A Fortify-like static analysis for JavaScript and TypeScript: Fortify's categories, kingdoms and priority order, dataflow traces, and a Developer-Workbook-style report, on Semgrep's open engine.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "bin": { "fortilike": "bin/fortilike" },
+  "files": ["bin", "src", "rules", "taxonomy", "README.md"],
+  "engines": { "node": ">=20.19.0" },
+  "scripts": {
+    "scan": "node bin/fortilike scan",
+    "test": "node bin/fortilike test-rules",
+    "list": "node bin/fortilike list-rules"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
