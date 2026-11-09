@@ -11,9 +11,11 @@
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildProgram, dataflowInstanceId, globalDataflow, loadTypescript } from './dataflow.mjs';
+import { openapiScan } from './openapi.mjs';
 
 export const VERSION = '0.1.0';
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -94,13 +96,15 @@ function which(program) {
 }
 
 class Semgrep {
-  constructor({ engine, image, target, excludes, jobs, scratch }) {
+  constructor({ engine, image, target, excludes, jobs, scratch, targets, rulesDir }) {
     this.engine = engine;
     this.image = image;
     this.target = target;
     this.excludes = excludes;
     this.jobs = jobs;
     this.scratch = scratch;
+    this.targets = targets ?? null; // explicit relative file list (git-tracked files), or null for the whole tree
+    this.rulesDir = rulesDir ?? RULES_DIR;
     if (engine === 'local' && !which('semgrep')) throw new Error('semgrep is not on PATH; install it or use --semgrep docker');
     if (engine === 'docker' && !which('docker')) throw new Error('docker is not on PATH; install Semgrep locally and use --semgrep local');
   }
@@ -124,24 +128,26 @@ class Semgrep {
       '--max-target-bytes', '3000000', '--disable-version-check'];
     for (const e of this.excludes) common.push('--exclude', e);
     if (this.jobs) common.push('--jobs', String(this.jobs));
+    const targetsUnder = (prefix) => (this.targets ? this.targets.map((t) => prefix + t) : [prefix.replace(/\/$/, '')]);
     if (this.engine === 'docker') {
-      const cfgs = configs.map((c) => c.replace(RULES_DIR, '/rules'));
-      const cmd = ['run', '--rm', '-v', `${RULES_DIR}:/rules:ro`];
+      const cfgs = configs.map((c) => c.replace(this.rulesDir, '/rules').replace(RULES_DIR, '/rules'));
+      const cmd = ['run', '--rm', '-v', `${this.rulesDir}:/rules:ro`];
       const root = this.scratchRoot();
       if (root) {
         cmd.push('-v', `${root}:/work`, '-v', `${this.target}:/work/src:ro`, '-w', '/work', this.image, 'semgrep', ...common,
           '--semgrepignore-v2', '--project-root', '/work');
         for (const e of this.excludes) if (e.replace(/^\/+|\/+$/g, '').includes('/')) cmd.push('--exclude', 'src/' + e.replace(/^\/+/, ''));
         for (const c of cfgs) cmd.push('--config', c);
-        return { program: 'docker', args: [...cmd, '/work/src'], prefix: '/work/src/' };
+        return { program: 'docker', args: [...cmd, ...targetsUnder('/work/src/')], prefix: '/work/src/' };
       }
       cmd.push('-v', `${this.target}:/src:ro`, '-w', '/src', this.image, 'semgrep', ...common);
       for (const c of cfgs) cmd.push('--config', c);
-      return { program: 'docker', args: [...cmd, '/src'], prefix: '/src/' };
+      return { program: 'docker', args: [...cmd, ...targetsUnder('/src/')], prefix: '/src/' };
     }
     const args = [...common];
     for (const c of configs) args.push('--config', c);
-    return { program: 'semgrep', args: [...args, this.target], prefix: this.target.replace(/\/+$/, '') + '/' };
+    const prefix = this.target.replace(/\/+$/, '') + '/';
+    return { program: 'semgrep', args: [...args, ...targetsUnder(prefix)], prefix };
   }
 
   run(configs, extra) {
@@ -263,7 +269,7 @@ function semgrepResultsToFindings(data, prefix, root, traces, community) {
       const [priority, likelihood] = fortifyPriority(impact, Number(fm.probability ?? d.probability), Number(fm.accuracy ?? d.accuracy), Number(fm.confidence ?? d.confidence));
       f = { category, kingdom: fm.kingdom ?? d.kingdom, impact, likelihood, priority, cwe: [].concat(meta.cwe ?? []), owasp: [].concat(meta.owasp ?? []), abstract: fm.abstract ?? '', rule: ruleSuffix(r.check_id), engine: 'semgrep' };
     }
-    const trace = traces.get(`${ruleSuffix(r.check_id)}|${path}|${start}`) ?? [];
+    const trace = (traces.get(`${ruleSuffix(r.check_id)}|${path}|${start}`) ?? []).map((st) => ({ ...st, file: rel }));
     if (trace.length) f.engine = 'semgrep-taint';
     findings.push({
       instance_id: instanceId(f.rule, rel, start > 0 && start <= lines.length ? lines[start - 1] : snippet),
@@ -353,7 +359,7 @@ function excluded(rel, name, excludes) {
   return false;
 }
 
-export function structuralScan(root, excludes) {
+export function structuralScan(root, excludes, allowed = null) {
   const findings = [];
   const walk = (dir) => {
     let entries;
@@ -364,6 +370,7 @@ export function structuralScan(root, excludes) {
       if (excluded(rel, e.name, excludes)) continue;
       if (e.isDirectory()) { walk(full); continue; }
       if (!e.isFile()) continue;
+      if (allowed && !allowed.has(rel)) continue;
       const rules = STRUCTURAL.filter((r) => r.applies(rel, e.name));
       if (!rules.length) continue;
       let text;
@@ -445,7 +452,7 @@ function writeSarif(path, info, findings) {
       properties: { category: f.category, kingdom: f.kingdom, priority: f.priority, impact: f.impact, likelihood: f.likelihood, kind: f.kind, engine: f.engine, status: f.status },
     };
     if (f.trace.length) res.codeFlows = [{ threadFlows: [{ locations: f.trace.map((s) => ({
-      location: { physicalLocation: { artifactLocation: { uri: f.path }, region: { startLine: s.line, snippet: { text: s.text } } }, message: { text: s.role } } })) }] }];
+      location: { physicalLocation: { artifactLocation: { uri: s.file ?? f.path }, region: { startLine: s.line, snippet: { text: s.text } } }, message: { text: s.role } } })) }] }];
     return res;
   });
   writeFileSync(path, JSON.stringify({
@@ -473,7 +480,7 @@ function writeMarkdown(path, info, findings) {
     if (head !== current) { current = head; out.push(head, '', f.abstract || f.message.split('. ')[0] + '.', ''); }
     const flags = [f.kind, ...(f.status === 'new' ? ['new'] : []), ...(f.trace.length ? ['trace'] : [])];
     out.push(`- \`${f.path}:${f.line}\` (${flags.join(', ')}) \`${f.instance_id.slice(0, 8)}\`: \`${firstLine(f).slice(0, 140).replace(/`/g, "'")}\``);
-    for (const st of f.trace) out.push(`  - ${st.role} L${st.line}: \`${st.text.slice(0, 120).replace(/`/g, "'")}\``);
+    for (const st of f.trace) out.push(`  - ${st.role} ${st.file && st.file !== f.path ? st.file + ':' : 'L'}${st.line}: \`${st.text.slice(0, 120).replace(/`/g, "'")}\``);
   }
   out.push('');
   writeFileSync(path, out.join('\n'));
@@ -492,7 +499,7 @@ table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;p
 .tag{display:inline-block;padding:0 6px;border:1px solid var(--line);border-radius:6px;font-size:12px;color:var(--muted);margin-left:6px}.tag.new{color:var(--crit);border-color:var(--crit)}
 details{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--card)}summary{cursor:pointer;padding:10px 14px;font-weight:600}summary small{font-weight:400;color:var(--muted)}
 .issue{padding:0 14px 14px}.loc{font-family:var(--mono);font-size:13px}pre{margin:6px 0 0;padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:8px;overflow:auto;font:12.5px/1.45 var(--mono)}
-.trace{margin:8px 0 0;font-family:var(--mono);font-size:12.5px}.trace div{padding:2px 0}.trace .role{display:inline-block;width:64px;color:var(--muted)}.msg{color:var(--muted);font-size:14px;margin:8px 0 0}
+.trace{margin:8px 0 0;font-family:var(--mono);font-size:12.5px}.trace div{padding:2px 0}.trace .role{display:inline-block;width:64px;color:var(--muted)}.trace .file{color:var(--muted)}.msg{color:var(--muted);font-size:14px;margin:8px 0 0}
 .bar{height:10px;border-radius:5px;background:var(--line);overflow:hidden;display:flex}.bar i{display:block;height:100%}.bar .Critical{background:var(--crit)}.bar .High{background:var(--high)}.bar .Medium{background:var(--med)}.bar .Low{background:var(--low)}
 @media(max-width:600px){h1{font-size:22px}.tile b{font-size:22px}}
 `;
@@ -504,7 +511,7 @@ function writeHtml(path, info, findings) {
   const parts = [`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`,
     `<title>${esc(info.name)} scan report</title><style>${HTML_CSS}</style></head><body><main>`,
     `<h1>${esc(info.name)}: Fortify-like scan</h1>`,
-    `<p class="sub">${esc(info.date)} · ${info.files_scanned} files · ${esc(info.engine)} · ${info.rules} rules · ref ${esc(info.ref ?? '')}<br>Not a Fortify scan: the categories, kingdoms and the Fortify Priority Order follow OpenText's public taxonomy and formula; the rules are this tool's, and its dataflow follows a value inside one function, not across files.</p>`,
+    `<p class="sub">${esc(info.date)} · ${info.files_scanned} files · ${esc(info.engine)} · ${info.rules} rules · ref ${esc(info.ref ?? '')}<br>Not a Fortify scan: the categories, kingdoms and the Fortify Priority Order follow OpenText's public taxonomy and formula; the rules are this tool's, and ${info.dataflow === 'global' ? 'dataflow follows a value across functions and files, one issue per source and sink pair, as the licensed scan does.' : 'its dataflow follows a value inside one function, not across files.'}</p>`,
     '<div class="grid">' + PRIORITIES.map((p) => `<div class="tile"><b style="color:var(--${color[p]})">${s.by_priority[p]}</b><span>${p}</span></div>`).join('') + `<div class="tile"><b>${findings.length}</b><span>issues</span></div></div>`,
     '<div class="bar">' + PRIORITIES.map((p) => `<i class="${p}" style="width:${((100 * s.by_priority[p]) / total).toFixed(1)}%"></i>`).join('') + '</div>'];
   if (info.baseline) parts.push(`<p class="sub">Against the baseline <code>${esc(info.baseline)}</code>: <b>${findings.filter((f) => f.status === 'new').length} new</b>, ${info.baseline_fixed} gone.</p>`);
@@ -528,12 +535,13 @@ function writeHtml(path, info, findings) {
     for (const f of sorted) {
       const tags = `<span class="tag">${esc(f.kind)}</span>` + (f.status === 'new' ? ' <span class="tag new">new</span>' : '') + (f.trace.length ? ' <span class="tag">dataflow</span>' : '');
       parts.push(`<details><summary><span class="p ${f.priority}">${f.priority}</span> <span class="loc">${esc(f.path)}:${f.line}</span>${tags} <small>${esc(f.instance_id.slice(0, 12))}</small></summary><div class="issue"><pre>${esc(f.snippet)}</pre>`);
-      if (f.trace.length) parts.push('<div class="trace">' + f.trace.map((st) => `<div><span class="role">${esc(st.role)}</span>L${st.line}: ${esc(st.text.slice(0, 200))}</div>`).join('') + '</div>');
+      if (f.trace.length) parts.push('<div class="trace">' + f.trace.map((st) => `<div><span class="role">${esc(st.role)}</span>${st.file && st.file !== f.path ? `<span class="file">${esc(st.file)}:</span>` : 'L'}${st.line}: ${esc(st.text.slice(0, 200))}</div>`).join('') + '</div>');
+      if (f.source) parts.push(`<p class="msg">Source: ${esc(f.source.label)} at <span class="loc">${esc(f.source.file)}:${f.source.line}</span></p>`);
       parts.push(`<p class="msg">${esc(f.message)}</p><p class="sub" style="font-size:12.5px">Impact ${f.impact.toFixed(1)} · Likelihood ${f.likelihood.toFixed(2)} · ${esc(f.engine)} · ${esc(f.rule)}</p></div></details>`);
     }
   }
   parts.push('<h2>Scan information</h2><table>');
-  for (const k of ['target', 'ref', 'engine', 'semgrep_version', 'rules', 'files_scanned', 'excludes', 'community', 'errors']) {
+  for (const k of ['target', 'ref', 'engine', 'dataflow', 'semgrep_version', 'rules', 'files_scanned', 'tracked_files', 'excludes', 'community', 'errors']) {
     if (k in info) { const v = info[k]; parts.push(`<tr><th>${esc(k.replace(/_/g, ' '))}</th><td>${esc(Array.isArray(v) ? v.join(', ') : String(v))}</td></tr>`); }
   }
   parts.push('</table></main></body></html>');
@@ -547,6 +555,46 @@ function ruleFiles() {
   const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) { const p = join(d, e.name); if (e.isDirectory()) walk(p); else if (e.name.endsWith('.yaml') && !e.name.includes('.test.')) out.push(p); } };
   walk(RULES_DIR);
   return out.sort();
+}
+
+/** Writes a rules directory without the taint rules (the global engine replaces them) and returns it. */
+function structuralRulesDir(out) {
+  const dir = join(out, '.rules', 'javascript');
+  rmSync(join(out, '.rules'), { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  for (const p of ruleFiles()) {
+    const text = readFileSync(p, 'utf8');
+    const head = text.slice(0, text.search(/^[ \t]*-[ \t]*id:[ \t]*fortify\./m));
+    const blocks = text.split(/^(?=[ \t]*-[ \t]*id:[ \t]*fortify\.)/m).slice(1)
+      .filter((b) => /^[ \t]*-[ \t]*id:[ \t]*fortify\./.test(b) && !/^[ \t]*mode:[ \t]*taint[ \t]*$/m.test(b));
+    if (blocks.length) writeFileSync(join(dir, basename(p)), head + blocks.join(''));
+  }
+  return join(out, '.rules');
+}
+
+function trackedFiles(target) {
+  const r = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: target, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  if (r.status !== 0) return null;
+  const files = r.stdout.split('\0').filter(Boolean).filter((f) => existsSync(join(target, f)));
+  return files.length ? files : null;
+}
+
+function dataflowToFindings(df, target) {
+  const out = [];
+  for (const f of df.findings) {
+    const d = categoryDefaults(f.category);
+    const confidence = f.source.kind === 'web' || f.source.kind === 'argv' ? 5 : f.source.kind === 'error' || f.source.kind === 'database' ? 4 : 3.5;
+    const [priority, likelihood] = fortifyPriority(d.impact, d.probability, d.accuracy, confidence);
+    const lines = readLines(target, f.sink.file);
+    out.push({
+      instance_id: dataflowInstanceId(f), rule: f.rule, category: f.category, kingdom: d.kingdom, priority, impact: d.impact,
+      likelihood: Math.round(likelihood * 100) / 100, path: f.sink.file, line: f.sink.line, end_line: f.sink.end_line,
+      snippet: snippetOf(lines, f.sink.line, f.sink.end_line),
+      message: `${f.category}: ${f.source.label} (${f.source.file}:${f.source.line}) reaches ${f.sink.argument ? '`' + f.sink.argument + '` in ' : ''}this call without a sanitizer on the path. ${f.abstract}`,
+      abstract: f.abstract, kind: classify(f.sink.file), engine: 'dataflow', cwe: [...(d.cwe ?? [])], owasp: [], trace: f.trace, status: 'existing', source: f.source,
+    });
+  }
+  return out;
 }
 
 function countRules() {
@@ -564,15 +612,38 @@ export function scan(opts) {
   const excludes = [...DEFAULT_EXCLUDES, ...(opts.exclude ?? [])];
   const log = (m) => process.stderr.write(m + '\n');
 
-  const sg = new Semgrep({ engine: opts.semgrep ?? 'docker', image: opts.image ?? SEMGREP_IMAGE, target, excludes, jobs: opts.jobs, scratch: out });
-  log(`fortilike ${VERSION}: scanning ${target} (${sg.engine} semgrep)`);
-  const configs = [join(RULES_DIR, 'javascript')];
+  // What the licensed scan sees is the repository, so by default only files git knows (tracked or
+  // untracked-but-not-ignored) are read; --all-files reads the whole tree.
+  const tracked = opts.allFiles ? null : trackedFiles(target);
+  const allowed = tracked ? new Set(tracked) : null;
+  const notExcluded = (relPath) => !excluded(relPath, basename(relPath), excludes);
+  const semgrepTargets = tracked ? tracked.filter((f) => notExcluded(f) && !/\.(png|jpe?g|gif|svg|ico|webp|woff2?|ttf|otf|eot|pdf|zip|gz|tgz|mp4|mp3|lock)$/i.test(f)) : null;
+
+  let dataflowMode = opts.dataflow ?? 'global';
+  let ts = null;
+  if (dataflowMode === 'global') {
+    ts = loadTypescript(target);
+    if (!ts) { log('  typescript is not installed in the target or next to fortilike; dataflow falls back to Semgrep taint rules (--dataflow semgrep)'); dataflowMode = 'semgrep'; }
+  }
+  const rulesDir = dataflowMode !== 'semgrep' ? structuralRulesDir(out) : RULES_DIR;
+  const sg = new Semgrep({ engine: opts.semgrep ?? 'docker', image: opts.image ?? SEMGREP_IMAGE, target, excludes, jobs: opts.jobs, scratch: out, targets: semgrepTargets, rulesDir });
+  log(`fortilike ${VERSION}: scanning ${target} (${sg.engine} semgrep, ${dataflowMode} dataflow${tracked ? `, ${tracked.length} files known to git` : ', every file'})`);
+  const configs = [join(rulesDir, 'javascript')];
   const { data, prefix } = sg.runJson(configs);
   log(`  rules: ${(data.results ?? []).length} semgrep results`);
-  const traces = parseTraces(sg.runTextTraces(configs));
-  log(`  traces: ${traces.size} dataflow traces`);
+  const traces = dataflowMode === 'semgrep' ? parseTraces(sg.runTextTraces(configs)) : new Map();
+  if (dataflowMode === 'off') data.results = (data.results ?? []).filter((r) => !traces.has(`${ruleSuffix(r.check_id)}|${r.path}|${r.start.line}`));
+  if (dataflowMode === 'semgrep') log(`  traces: ${traces.size} dataflow traces`);
   let { findings, errors } = semgrepResultsToFindings(data, prefix, target, traces, false);
   const filesScanned = (data.paths?.scanned ?? []).length;
+  let dataflowStats = null;
+  if (dataflowMode === 'global') {
+    const allowedAbs = allowed ? new Set([...allowed].map((f) => resolve(target, f))) : null;
+    const { program, rootNames } = buildProgram(ts, target, { allowed: allowedAbs, excluded: (full, name) => excluded(relative(target, full).split(sep).join('/'), name, excludes) });
+    const df = globalDataflow({ ts, program, target, rootNames, classify, log, includeTests: !opts.noTests });
+    dataflowStats = df.stats;
+    findings = findings.concat(dataflowToFindings(df, target));
+  }
 
   if (opts.community) {
     const c = sg.runJson(COMMUNITY_PACKS);
@@ -584,9 +655,12 @@ export function scan(opts) {
     findings = findings.concat(more);
   }
   if (!opts.noStructural) {
-    const sf = structuralScan(target, excludes);
+    const sf = structuralScan(target, excludes, allowed);
     log(`  structural: ${sf.length} results in configuration and text files`);
     findings = findings.concat(sf);
+    const oa = openapiScan(target, excludes, allowed, { categoryDefaults, fortifyPriority, classify, instanceId });
+    if (oa.length) log(`  openapi: ${oa.length} results in API descriptions`);
+    findings = findings.concat(oa);
   }
   if (opts.noTests) findings = findings.filter((f) => f.kind !== 'test');
 
@@ -606,8 +680,9 @@ export function scan(opts) {
   findings = sortFindings(findings);
   const info = {
     name, target, ref: opts.ref ?? '', date: new Date().toISOString().slice(0, 16).replace('T', ' '),
-    engine: `Semgrep CE (${sg.engine})`, semgrep_version: sg.version(), rules: countRules(), files_scanned: filesScanned,
-    excludes, community: Boolean(opts.community), baseline: opts.baseline ?? '', baseline_fixed: baselineFixed, errors: errors.slice(0, 10),
+    engine: `Semgrep CE (${sg.engine})${dataflowMode === 'global' ? ` + global dataflow (typescript ${ts.version})` : ''}`, dataflow: dataflowMode,
+    semgrep_version: sg.version(), rules: countRules(), files_scanned: filesScanned, tracked_files: tracked ? tracked.length : 'all',
+    dataflow_stats: dataflowStats, excludes, community: Boolean(opts.community), baseline: opts.baseline ?? '', baseline_fixed: baselineFixed, errors: errors.slice(0, 10),
   };
   writeJson(join(out, 'fortilike.json'), info, findings);
   writeSarif(join(out, 'fortilike.sarif'), info, findings);
@@ -657,12 +732,15 @@ const USAGE = `fortilike ${VERSION}: a Fortify-like static analysis for JavaScri
 
   fortilike scan <dir> [--out DIR] [--name NAME] [--ref REF] [--exclude GLOB]... [--baseline JSON]
                        [--community] [--no-structural] [--no-tests] [--semgrep docker|local]
+                       [--dataflow global|semgrep|off] [--all-files]
                        [--image IMAGE] [--jobs N] [--fail-on Critical|High|Medium|Low]
   fortilike test-rules [--semgrep docker|local] [--image IMAGE]
   fortilike list-rules
 
-Output: report.html, report.md, fortilike.json (baselines), fortilike.sarif. Not Fortify: the categories,
-kingdoms and the Fortify Priority Order follow OpenText's public taxonomy; the rules are this tool's.
+By default only files git knows are read (what the licensed scan sees) and dataflow runs across functions
+and files on the TypeScript compiler (needs typescript in the target or next to fortilike). Output:
+report.html, report.md, fortilike.json (baselines), fortilike.sarif. Not Fortify: the categories, kingdoms
+and the Fortify Priority Order follow OpenText's public taxonomy; the rules are this tool's.
 `;
 
 export function main(argv) {
@@ -681,6 +759,9 @@ export function main(argv) {
     else if (a === '--no-structural') opts.noStructural = true;
     else if (a === '--no-tests') opts.noTests = true;
     else if (a === '--semgrep') opts.semgrep = take();
+    else if (a === '--dataflow') opts.dataflow = take();
+    else if (a === '--all-files') opts.allFiles = true;
+    else if (a === '--tracked') opts.allFiles = false;
     else if (a === '--image') opts.image = take();
     else if (a === '--jobs') opts.jobs = Number(take());
     else if (a === '--fail-on') opts.failOn = take();
@@ -689,6 +770,7 @@ export function main(argv) {
     else positional.push(a);
   }
   if (opts.semgrep && !['docker', 'local'].includes(opts.semgrep)) throw new Error('--semgrep takes docker or local');
+  if (opts.dataflow && !['global', 'semgrep', 'off'].includes(opts.dataflow)) throw new Error('--dataflow takes global, semgrep or off');
   if (opts.failOn && !PRIORITIES.includes(opts.failOn)) throw new Error(`--fail-on takes one of ${PRIORITIES.join(', ')}`);
   switch (command) {
     case 'scan':
