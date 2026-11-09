@@ -1,0 +1,219 @@
+# Browser code: DOM cross-site scripting (dataflow) and the HTML5 policies Fortify reports on
+# postMessage, CORS and Content Security Policy.
+rules:
+  - id: fortify.cross-site-scripting-dom
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Cross-Site Scripting: DOM: $SINK puts data from the page's URL, a posted message, a cookie or the
+      referrer into the document as HTML or code. Build nodes with textContent, or encode the data for
+      HTML before it reaches the page.
+    metadata:
+      fortify:
+        category: "Cross-Site Scripting: DOM"
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Data the browser controls is written into the document as markup or run as code.
+      cwe: ["CWE-79"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: location.$P
+              - pattern: window.location.$P
+              - pattern: document.location.$P
+              - pattern: self.location.$P
+          - metavariable-regex:
+              metavariable: $P
+              regex: ^(hash|search|href|pathname)$
+      - pattern: document.URL
+      - pattern: document.documentURI
+      - pattern: document.baseURI
+      - pattern: document.referrer
+      - pattern: document.cookie
+      - pattern: window.name
+      - pattern: new URLSearchParams(location.search).get(...)
+      - pattern: new URLSearchParams(window.location.search).get(...)
+      - pattern: new URL(location.href).searchParams.get(...)
+      - pattern: new URL(window.location.href).searchParams.get(...)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $W.addEventListener("message", function $F($E) { ... })
+              - pattern-inside: |
+                  $W.addEventListener("message", function ($E) { ... })
+              - pattern-inside: |
+                  $W.addEventListener("message", ($E) => { ... })
+              - pattern-inside: |
+                  $W.onmessage = ($E) => { ... }
+              - pattern-inside: |
+                  $W.onmessage = function ($E) { ... }
+              - pattern-inside: |
+                  addEventListener("message", ($E) => { ... })
+              - pattern-inside: |
+                  addEventListener("message", function ($E) { ... })
+          - pattern: $E.data
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^.*(escape|sanitize|encode|purify).*$
+      - patterns:
+          - pattern: $O.$F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^(sanitize|escape|escapeHtml|encodeHtml|purify)$
+      - pattern: encodeURIComponent(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: document.createTextNode(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $X.innerHTML = $SINK
+              - pattern: $X.outerHTML = $SINK
+              - pattern: $X.srcdoc = $SINK
+              - pattern: $X.innerHTML += $SINK
+              - pattern: document.write($SINK)
+              - pattern: document.writeln($SINK)
+              - pattern: $X.insertAdjacentHTML($POS, $SINK)
+              - pattern: $X.html($SINK)
+              - pattern: $X.append($SINK)
+              - pattern: $X.prepend($SINK)
+              - pattern: $X.after($SINK)
+              - pattern: $X.before($SINK)
+              - pattern: $X.replaceWith($SINK)
+              - pattern: $($SINK)
+              - pattern: jQuery($SINK)
+              - pattern: $S.bypassSecurityTrustHtml($SINK)
+              - pattern: $S.bypassSecurityTrustScript($SINK)
+              - pattern: $S.bypassSecurityTrustUrl($SINK)
+              - pattern: $S.bypassSecurityTrustResourceUrl($SINK)
+              - pattern: new Range().createContextualFragment($SINK)
+              - pattern: $R.createContextualFragment($SINK)
+              - pattern: eval($SINK)
+              - pattern: new Function(..., $SINK)
+              - pattern: setTimeout($SINK, ...)
+              - pattern: setInterval($SINK, ...)
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern: '<$EL dangerouslySetInnerHTML={{__html: $SINK}} ... />'
+          - focus-metavariable: $SINK
+
+  - id: fortify.html5-overly-permissive-message-posting-policy
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      HTML5: Overly Permissive Message Posting Policy: postMessage sends to any origin ('*'). Any page
+      that holds a reference to this window receives the message. Name the target origin.
+    metadata:
+      fortify:
+        category: "HTML5: Overly Permissive Message Posting Policy"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A message is posted with the wildcard target origin.
+      cwe: ["CWE-942"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - pattern: $W.postMessage($D, "*")
+      - pattern: $W.postMessage($D, "*", ...)
+      - pattern: '$W.postMessage($D, {..., targetOrigin: "*", ...})'
+
+  - id: fortify.html5-overly-permissive-cors-policy
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      HTML5: Overly Permissive CORS Policy: Access-Control-Allow-Origin is '*', so any site's script may
+      read this response. Echo an allow-listed origin instead, with Vary: Origin.
+    metadata:
+      fortify:
+        category: "HTML5: Overly Permissive CORS Policy"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: Cross-origin reads are allowed from every origin.
+      cwe: ["CWE-942"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", "*")
+              - pattern: $RES.header("$H", "*")
+              - pattern: $RES.set("$H", "*")
+              - pattern: '$RES.writeHead($C, {..., "$H": "*", ...})'
+              - pattern: |
+                  { ..., "$H": "*", ... }
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^access-control-allow-origin$
+      - pattern: 'cors({..., origin: "*", ...})'
+      - pattern: 'cors({..., origin: true, ...})'
+
+  - id: fortify.html5-overly-permissive-content-security-policy
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      HTML5: Overly Permissive Content Security Policy: the policy allows 'unsafe-inline' or
+      'unsafe-eval' (or every source with *), which lets an injected script run. Use nonces or hashes
+      for inline scripts and name the sources.
+    metadata:
+      fortify:
+        category: "HTML5: Overly Permissive Content Security Policy"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: The Content Security Policy permits inline or evaluated script, or any source.
+      cwe: ["CWE-1021", "CWE-942"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    patterns:
+      - pattern-either:
+          - pattern: $RES.setHeader("$H", "$POLICY")
+          - pattern: $RES.header("$H", "$POLICY")
+          - pattern: $RES.set("$H", "$POLICY")
+          - pattern: |
+              { ..., "$H": "$POLICY", ... }
+      - metavariable-regex:
+          metavariable: $H
+          regex: (?i)^content-security-policy$
+      - metavariable-regex:
+          metavariable: $POLICY
+          regex: (?i).*('unsafe-inline'|'unsafe-eval'|(script|default)-src[^;]*\s\*(\s|;|$)).*
+
+  - id: fortify.privacy-violation-autocomplete
+    languages: [javascript, typescript]
+    severity: INFO
+    message: >-
+      Privacy Violation: Autocomplete: a password field without an autocomplete attribute lets the
+      browser store what is typed. Fortify reports it; set autoComplete to current-password or
+      new-password (which password managers honour) or off.
+    metadata:
+      fortify:
+        category: "Privacy Violation: Autocomplete"
+        kingdom: Security Features
+        impact: "1.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "4.0"
+        abstract: A password field does not say how the browser may autocomplete it.
+      cwe: ["CWE-525"]
+      owasp: ["A04:2021 Insecure Design"]
+    patterns:
+      - pattern-either:
+          - pattern: <input type="password" ... />
+          - pattern: <$INPUT type="password" ... />
+      - pattern-not: <input type="password" ... autoComplete=... />
+      - pattern-not: <input type="password" ... autocomplete=... />
+      - pattern-not: <$INPUT type="password" ... autoComplete=... />
+      - pattern-not: <$INPUT type="password" ... autocomplete=... />
