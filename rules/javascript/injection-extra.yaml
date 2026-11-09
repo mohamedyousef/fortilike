@@ -1,0 +1,415 @@
+# More Input Validation and Representation rules: object and database shaped sinks, template engines,
+# deserialization, dynamic module loading, trust boundaries, and regular expressions that never finish.
+rules:
+  - id: fortify.prototype-pollution
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Prototype Pollution: request data chooses the property name written in $SINK (or is merged deep
+      into an object). A key of __proto__ or constructor.prototype changes every object in the
+      process. Allow-list the keys, use a Map or a null-prototype object, and never merge request data
+      recursively.
+    metadata:
+      fortify:
+        category: Prototype Pollution
+        kingdom: Input Validation and Representation
+        impact: "4.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data names a property to write, or is merged deep into an object.
+      cwe: ["CWE-1321"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|query|params|body|cookies)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+    pattern-sanitizers:
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: encodeURIComponent(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $O[$SINK] = $V
+              - pattern: $O[$SINK][$K] = $V
+              - pattern: $O[$K][$SINK] = $V
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern-either:
+              - pattern: $L.merge($T, $SINK, ...)
+              - pattern: $L.mergeWith($T, $SINK, ...)
+              - pattern: $L.defaultsDeep($T, $SINK, ...)
+              - pattern: $L.set($T, $SINK, ...)
+              - pattern: $L.setWith($T, $SINK, ...)
+              - pattern: merge($T, $SINK, ...)
+              - pattern: deepmerge($T, $SINK, ...)
+              - pattern: extend(true, $T, $SINK, ...)
+          - focus-metavariable: $SINK
+
+  - id: fortify.mass-assignment
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Mass Assignment: the request body is written into a model or object whole ($SINK), so a client
+      sets fields it should not (a role, a price, an owner). Pick the allowed fields explicitly.
+    metadata:
+      fortify:
+        category: Mass Assignment
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A request body is copied into a record without choosing the fields.
+      cwe: ["CWE-915"]
+      owasp: ["A08:2021 Software and Data Integrity Failures"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.body
+              - pattern: $REQ.body[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|ctx\.request)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Object.assign($T, $SINK, ...)
+              - pattern: new $MODEL($SINK)
+              - pattern: $MODEL.create($SINK, ...)
+              - pattern: $MODEL.insertMany($SINK, ...)
+              - pattern: $MODEL.build($SINK, ...)
+              - pattern: $MODEL.update($SINK, ...)
+              - pattern: $MODEL.updateOne($W, $SINK, ...)
+              - pattern: $MODEL.findOneAndUpdate($W, $SINK, ...)
+              - pattern: $MODEL.findByIdAndUpdate($ID, $SINK, ...)
+              - pattern: $DOC.set($SINK)
+          - metavariable-regex:
+              metavariable: $SINK
+              regex: '^[\w$.\[\]''"]+$'
+          - focus-metavariable: $SINK
+
+  - id: fortify.nosql-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      NoSQL Injection: request data is used as a query document or operator in $SINK. An object such
+      as {"$gt": ""} in place of a string changes what the query matches. Cast to the expected type
+      and build the query with constants.
+    metadata:
+      fortify:
+        category: NoSQL Injection
+        kingdom: Input Validation and Representation
+        impact: "5.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data becomes part of a document-database query.
+      cwe: ["CWE-943"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|query|params|body|cookies)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+    pattern-sanitizers:
+      - pattern: String(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: new ObjectId(...)
+      - pattern: ObjectId(...)
+      - pattern: $S.sanitize(...)
+      - pattern: sanitize(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $C.$M($SINK, ...)
+              - pattern: $C.$M($F, $SINK, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(find|findOne|findOneAndUpdate|findOneAndDelete|findOneAndReplace|updateOne|updateMany|deleteOne|deleteMany|replaceOne|countDocuments|count|distinct|aggregate|where)$
+          - metavariable-regex:
+              metavariable: $C
+              regex: (?i)^(.*\.)?(collection|col|coll|db|database|mongo|model|users?|accounts?|orders?|items?|products?|documents?|docs|sessions?|tokens?|[A-Z]\w*(Model|Collection|s))$
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern-either:
+              - pattern: '{ ..., $where: $SINK, ... }'
+              - pattern: '{ ..., $regex: $SINK, ... }'
+          - focus-metavariable: $SINK
+
+  - id: fortify.dangerous-file-inclusion
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Dangerous File Inclusion: the module or template loaded in $SINK is named by request data, so a
+      request can load any file on the machine as code or as a page. Map request values to a fixed
+      list of names.
+    metadata:
+      fortify:
+        category: Dangerous File Inclusion
+        kingdom: Input Validation and Representation
+        impact: "5.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data names a module or template the program loads.
+      cwe: ["CWE-98", "CWE-829"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|query|params|body|cookies)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - pattern: process.argv
+      - pattern: process.argv[...]
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: require($SINK)
+              - pattern: require.resolve($SINK)
+              - pattern: import($SINK)
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern: $RES.render($SINK, ...)
+          - metavariable-regex:
+              metavariable: $RES
+              regex: (?i)^(res|response|reply|app|router|ctx)$
+          - metavariable-pattern:
+              metavariable: $SINK
+              patterns:
+                - pattern: $X
+                - pattern-not: '"..."'
+          - focus-metavariable: $SINK
+
+  - id: fortify.server-side-template-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Server-Side Template Injection: request data becomes the template text in $SINK, not a value
+      rendered into it. Template syntax in the data runs on the server. Keep templates constant and
+      pass request data as the context.
+    metadata:
+      fortify:
+        category: Server-Side Template Injection
+        kingdom: Input Validation and Representation
+        impact: "5.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data is compiled or rendered as a template.
+      cwe: ["CWE-1336", "CWE-94"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|query|params|body|cookies)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $E.render($SINK, ...)
+              - pattern: $E.renderString($SINK, ...)
+              - pattern: $E.compile($SINK, ...)
+              - pattern: $E.template($SINK, ...)
+              - pattern: $E.parse($SINK, ...)
+              - pattern: $E.renderFile($SINK, ...)
+          - metavariable-regex:
+              metavariable: $E
+              regex: (?i)^(ejs|pug|jade|nunjucks|handlebars|hbs|mustache|dot|doT|_|lodash|underscore|twig|liquid|liquidjs|eta|squirrelly|sqrl|velocity|swig|marko|art)$
+          - focus-metavariable: $SINK
+
+  - id: fortify.dynamic-code-evaluation-unsafe-deserialization
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Dynamic Code Evaluation: Unsafe Deserialization: request data is deserialized by $SINK with a
+      format that can carry code or object types (node-serialize, v8, unsafe YAML). Use JSON.parse
+      with a schema check.
+    metadata:
+      fortify:
+        category: "Dynamic Code Evaluation: Unsafe Deserialization"
+        kingdom: Input Validation and Representation
+        impact: "5.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data is deserialized with a format that can run code.
+      cwe: ["CWE-502"]
+      owasp: ["A08:2021 Software and Data Integrity Failures"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|query|params|body|cookies|rawBody)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $S.unserialize($SINK, ...)
+              - pattern: unserialize($SINK, ...)
+              - pattern: $V.deserialize($SINK, ...)
+              - pattern: '$Y.load($SINK, { ..., schema: DEFAULT_FULL_SCHEMA, ... })'
+              - pattern: '$Y.safeLoad($SINK, { ..., schema: DEFAULT_FULL_SCHEMA, ... })'
+              - pattern: $Y.unsafeLoad($SINK, ...)
+          - focus-metavariable: $SINK
+
+  - id: fortify.access-control-database
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Access Control: Database: the record is looked up by a key from the request ($SINK) with no
+      check that the signed-in user may see it. Scope the query to the user (or check ownership after
+      the read).
+    metadata:
+      fortify:
+        category: "Access Control: Database"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "3.0"
+        accuracy: "3.0"
+        confidence: "4.0"
+        abstract: A request-supplied key selects a record without an authorization check.
+      cwe: ["CWE-639", "CWE-566"]
+      owasp: ["A01:2021 Broken Access Control"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.params
+              - pattern: $REQ.params[...]
+              - pattern: $REQ.params.$X
+              - pattern: $REQ.query
+              - pattern: $REQ.query[...]
+              - pattern: $REQ.query.$X
+              - pattern: $REQ.body.$X
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|ctx\.request)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $M.findById($SINK, ...)
+              - pattern: $M.findByPk($SINK, ...)
+              - pattern: $M.findByIdAndUpdate($SINK, ...)
+              - pattern: $M.findByIdAndDelete($SINK, ...)
+              - pattern: '$M.findOne({ ..., _id: $SINK, ... }, ...)'
+              - pattern: '$M.findOne({ ..., id: $SINK, ... }, ...)'
+              - pattern: '$M.findUnique({ ..., where: { ..., id: $SINK, ... }, ... })'
+              - pattern: '$M.findOne({ ..., where: { ..., id: $SINK, ... }, ... })'
+          - pattern-not: '$M.findOne({ ..., owner: $U, ... }, ...)'
+          - pattern-not: '$M.findOne({ ..., ownerId: $U, ... }, ...)'
+          - pattern-not: '$M.findOne({ ..., userId: $U, ... }, ...)'
+          - pattern-not: '$M.findOne({ ..., user: $U, ... }, ...)'
+          - pattern-not: '$M.findOne({ ..., tenantId: $U, ... }, ...)'
+          - pattern-not: '$M.findOne({ ..., accountId: $U, ... }, ...)'
+          - focus-metavariable: $SINK
+
+  - id: fortify.trust-boundary-violation
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Trust Boundary Violation: request data is stored in the session ($SINK), where later code treats
+      it as validated. Validate it first, or keep it out of the session.
+    metadata:
+      fortify:
+        category: Trust Boundary Violation
+        kingdom: Encapsulation
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Unvalidated request data is stored in the session.
+      cwe: ["CWE-501"]
+      owasp: ["A04:2021 Insecure Design"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|ctx\.request)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(query|params|body|headers|cookies|url)$
+    pattern-sanitizers:
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: Boolean(...)
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^.*(validate|sanitize|parse|check|assert).*$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.session.$K = $SINK
+              - pattern: $REQ.session[$K] = $SINK
+              - pattern: $S.session.$K = $SINK
+              - pattern: $S.session[$K] = $SINK
+          - focus-metavariable: $SINK
+
+  - id: fortify.denial-of-service-regular-expression-nested-quantifier
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Denial of Service: Regular Expression: the pattern repeats a group that itself repeats
+      (such as (\w+)* or (.*)+). On input that almost matches, the engine backtracks exponentially and
+      the process hangs. Make the inner repetition unambiguous or bound the input.
+    metadata:
+      fortify:
+        category: "Denial of Service: Regular Expression"
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "3.0"
+        confidence: "4.0"
+        abstract: A regular expression literal has nested quantifiers.
+      cwe: ["CWE-1333"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-regex: '/(?:[^/\\\n]|\\.)*\((?:\?:)?(?:\[[^\]\n]*\]|\\[wdsWDS]|\.)[+*]\)[+*](?:[^/\\\n]|\\.)*/[dgimsuvy]*'
