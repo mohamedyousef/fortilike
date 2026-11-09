@@ -1,0 +1,755 @@
+# Input Validation and Representation: dataflow rules. A source (a web request, the command line,
+# the environment) reaches a sink without a sanitizer. Semgrep's taint mode follows the data through
+# assignments, calls, template strings and object fields inside a function; a value that arrives as a
+# parameter from another function is not followed (Fortify's engine does that across files).
+rules:
+  - id: fortify.path-manipulation
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Path Manipulation: a file path comes from $SINK, which carries data from a request or the command
+      line. An attacker names the file the program reads, writes or deletes. Resolve the path, then check
+      it stays under the allowed root (or allow-list the names).
+    metadata:
+      fortify:
+        category: Path Manipulation
+        kingdom: Input Validation and Representation
+        impact: "4.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data names a file the program opens, writes or removes.
+      cwe: ["CWE-22", "CWE-73"]
+      owasp: ["A01:2021 Broken Access Control"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest|ctx\.request|context\.request)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|rawHeaders|query|params|body|cookies|hostname|host|rawBody)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - pattern: '($REQ: Http2ServerRequest).$PROP'
+      - pattern: '($REQ: Request).$PROP'
+      - pattern: process.argv
+      - pattern: process.argv[...]
+    pattern-sanitizers:
+      - pattern: basename(...)
+      - pattern: $P.basename(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+      - pattern: encodeURIComponent(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $FS.$M($SINK, ...)
+              - pattern: $M($SINK, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(readFile|readFileSync|writeFile|writeFileSync|appendFile|appendFileSync|readdir|readdirSync|mkdir|mkdirSync|mkdtemp|mkdtempSync|rm|rmSync|rmdir|rmdirSync|unlink|unlinkSync|rename|renameSync|copyFile|copyFileSync|cp|cpSync|createReadStream|createWriteStream|open|openSync|opendir|opendirSync|stat|statSync|lstat|lstatSync|access|accessSync|realpath|realpathSync|readlink|readlinkSync|symlink|symlinkSync|chmod|chmodSync|chown|chownSync|truncate|truncateSync|utimes|utimesSync|watch|watchFile|sendFile|download|loadFile)$
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern-either:
+              - pattern: $FS.$M($FROM, $SINK, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(rename|renameSync|copyFile|copyFileSync|cp|cpSync|symlink|symlinkSync|link|linkSync)$
+          - focus-metavariable: $SINK
+
+  - id: fortify.command-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Command Injection: the program or command line in $SINK carries data from a request, the command
+      line or the environment. Run a fixed program with an argument array (no shell), and allow-list
+      what the data may name.
+    metadata:
+      fortify:
+        category: Command Injection
+        kingdom: Input Validation and Representation
+        impact: "5.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data chooses the program or the command line a child process runs.
+      cwe: ["CWE-78", "CWE-77"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|rawHeaders|query|params|body|cookies|hostname|host|rawBody)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - pattern: process.argv
+      - pattern: process.argv[...]
+      - pattern: process.env.$X
+      - pattern: process.env[...]
+    pattern-sanitizers:
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $M($SINK, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(exec|execSync|execFile|execFileSync|spawn|spawnSync|fork|execa|execaSync|execaCommand|execaCommandSync)$
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern: $CP.$M($SINK, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(exec|execSync|execFile|execFileSync|spawn|spawnSync|fork)$
+          - metavariable-regex:
+              metavariable: $CP
+              regex: (?i)^(cp|child_process|childProcess|child|proc|subprocess|node:child_process)$
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern-either:
+              - pattern: '$CP.$M($P, $SINK, {..., shell: true, ...})'
+              - pattern: '$M($P, $SINK, {..., shell: true, ...})'
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(spawn|spawnSync|execFile|execFileSync|execa|execaSync)$
+          - focus-metavariable: $SINK
+
+  - id: fortify.server-side-request-forgery
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Server-Side Request Forgery: the request's destination $SINK carries data from an incoming request
+      or the command line, so the server can be made to call internal hosts. Allow-list the hosts, or
+      take only a path and put it under a fixed origin.
+    metadata:
+      fortify:
+        category: Server-Side Request Forgery
+        kingdom: Input Validation and Representation
+        impact: "4.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data chooses the URL or host of an outbound request.
+      cwe: ["CWE-918"]
+      owasp: ["A10:2021 Server-Side Request Forgery"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest|ctx\.request|context\.request)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|rawHeaders|query|params|body|cookies|hostname|host|rawBody)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - pattern: '($REQ: Http2ServerRequest).$PROP'
+      - pattern: '($REQ: Request).$PROP'
+      - pattern: process.argv
+      - pattern: process.argv[...]
+    pattern-sanitizers:
+      - pattern: encodeURIComponent(...)
+      - pattern: Number(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fetch($SINK, ...)
+              - pattern: $W.fetch($SINK, ...)
+              - pattern: new WebSocket($SINK, ...)
+              - pattern: new EventSource($SINK, ...)
+              - pattern: new Request($SINK, ...)
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern: $H.$M($SINK, ...)
+          - metavariable-regex:
+              metavariable: $H
+              regex: ^(http|https|http2|undici|got|axios|needle|superagent|request|ky|phin|bent)$
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|post|put|patch|delete|head|request|stream|connect|fetch)$
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern: $H($SINK, ...)
+          - metavariable-regex:
+              metavariable: $H
+              regex: ^(got|axios|needle|superagent|request|ky|phin|bent|undici)$
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern-either:
+              - pattern: '$H.$M({..., hostname: $SINK, ...}, ...)'
+              - pattern: '$H.$M({..., host: $SINK, ...}, ...)'
+              - pattern: '$H.$M({..., url: $SINK, ...}, ...)'
+              - pattern: '$H({..., url: $SINK, ...})'
+          - metavariable-regex:
+              metavariable: $H
+              regex: ^(http|https|http2|undici|got|axios|needle|superagent|request)$
+          - focus-metavariable: $SINK
+
+  - id: fortify.open-redirect
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Open Redirect: the redirect target $SINK carries data from the request or the page's URL, so a
+      link can send people to another site. Allow-list the targets, or keep only a path and prefix the
+      site's own origin.
+    metadata:
+      fortify:
+        category: Open Redirect
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data chooses where a redirect sends the user.
+      cwe: ["CWE-601"]
+      owasp: ["A01:2021 Broken Access Control"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|query|params|body|cookies|hostname|host)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - patterns:
+          - pattern-either:
+              - pattern: location.$P
+              - pattern: window.location.$P
+              - pattern: document.location.$P
+              - pattern: document.URL
+              - pattern: document.documentURI
+              - pattern: document.referrer
+              - pattern: window.name
+          - metavariable-regex:
+              metavariable: $P
+              regex: ^(hash|search|href|pathname)$
+      - pattern: new URLSearchParams(location.search).get(...)
+      - pattern: new URLSearchParams(window.location.search).get(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.redirect($SINK)
+              - pattern: $RES.redirect($CODE, $SINK)
+              - pattern: $RES.location($SINK)
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern-either:
+              - pattern: '$RES.writeHead($CODE, {..., $LOC: $SINK, ...})'
+              - pattern: $RES.setHeader($LOC, $SINK)
+              - pattern: $RES.header($LOC, $SINK)
+              - pattern: $RES.set($LOC, $SINK)
+          - metavariable-regex:
+              metavariable: $LOC
+              regex: (?i)^["']?location["']?$
+          - metavariable-pattern:
+              metavariable: $RES
+              patterns:
+                - pattern-either:
+                    - pattern: $R
+                    - pattern: $R.$CHAIN(...)
+                    - pattern: $R.$CHAIN(...).$CHAIN2(...)
+                    - pattern: $O.$R
+                - metavariable-regex:
+                    metavariable: $R
+                    regex: (?i)^(res|response|reply|rep)$
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern-either:
+              - pattern: location.href = $SINK
+              - pattern: window.location.href = $SINK
+              - pattern: window.location = $SINK
+              - pattern: location = $SINK
+              - pattern: location.assign($SINK)
+              - pattern: location.replace($SINK)
+              - pattern: window.location.assign($SINK)
+              - pattern: window.location.replace($SINK)
+              - pattern: window.open($SINK, ...)
+              - pattern: open($SINK, ...)
+          - focus-metavariable: $SINK
+
+  - id: fortify.header-manipulation
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Header Manipulation: the response header value $SINK carries request data. Node refuses CR and LF
+      in header values, so response splitting fails, but the header still says what the client chose:
+      allow-list or encode the value.
+    metadata:
+      fortify:
+        category: Header Manipulation
+        kingdom: Input Validation and Representation
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data becomes a response header value.
+      cwe: ["CWE-113"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest|ctx\.request|context\.request)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|rawHeaders|query|params|body|cookies|hostname|host|rawBody)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - pattern: '($REQ: Http2ServerRequest).$PROP'
+      - pattern: '($REQ: Request).$PROP'
+      - pattern: process.argv
+      - pattern: process.argv[...]
+    pattern-sanitizers:
+      - pattern: encodeURIComponent(...)
+      - pattern: encodeURI(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: String(Number(...))
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader($NAME, $SINK)
+              - pattern: $RES.header($NAME, $SINK)
+              - pattern: $RES.set($NAME, $SINK)
+              - pattern: $RES.append($NAME, $SINK)
+              - pattern: '$RES.writeHead($CODE, {..., $NAME: $SINK, ...})'
+              - pattern: '$RES.writeHead($CODE, $MSG, {..., $NAME: $SINK, ...})'
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: (?i)^(?!["']?location["']?$).*
+          - metavariable-pattern:
+              metavariable: $RES
+              patterns:
+                - pattern-either:
+                    - pattern: $R
+                    - pattern: $R.$CHAIN(...)
+                    - pattern: $R.$CHAIN(...).$CHAIN2(...)
+                    - pattern: $O.$R
+                - metavariable-regex:
+                    metavariable: $R
+                    regex: (?i)^(res|response|reply|rep)$
+          - focus-metavariable: $SINK
+
+  - id: fortify.cross-site-scripting-reflected
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Cross-Site Scripting: Reflected: the response body $SINK carries request data without encoding.
+      Encode for HTML (or answer JSON with the right content type) before the data reaches the page.
+    metadata:
+      fortify:
+        category: "Cross-Site Scripting: Reflected"
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Request data is written into the response body unencoded.
+      cwe: ["CWE-79"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest|ctx\.request|context\.request)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|rawHeaders|query|params|body|cookies|hostname|host|rawBody)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - pattern: '($REQ: Http2ServerRequest).$PROP'
+      - pattern: '($REQ: Request).$PROP'
+      - pattern: process.argv
+      - pattern: process.argv[...]
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^.*(escape|sanitize|encode|purify|textContent).*$
+      - pattern: JSON.stringify(...)
+      - pattern: encodeURIComponent(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.end($SINK, ...)
+              - pattern: $RES.write($SINK, ...)
+              - pattern: $RES.send($SINK)
+          - metavariable-pattern:
+              metavariable: $RES
+              patterns:
+                - pattern-either:
+                    - pattern: $R
+                    - pattern: $R.$CHAIN(...)
+                    - pattern: $R.$CHAIN(...).$CHAIN2(...)
+                    - pattern: $O.$R
+                - metavariable-regex:
+                    metavariable: $R
+                    regex: (?i)^(res|response|reply|rep)$
+          - focus-metavariable: $SINK
+
+  - id: fortify.log-forging
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Log Forging: request data reaches the log through $SINK unencoded. A line break in the data forges
+      log entries; a terminal escape rewrites the console. Encode or strip control characters first.
+    metadata:
+      fortify:
+        category: Log Forging
+        kingdom: Input Validation and Representation
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: Request data is written to a log unencoded.
+      cwe: ["CWE-117"]
+      owasp: ["A09:2021 Security Logging and Monitoring Failures"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest|ctx\.request|context\.request)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|rawHeaders|query|params|body|cookies|hostname|host|rawBody)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - pattern: '($REQ: Http2ServerRequest).$PROP'
+      - pattern: '($REQ: Request).$PROP'
+      - pattern: process.argv
+      - pattern: process.argv[...]
+    pattern-sanitizers:
+      - pattern: JSON.stringify(...)
+      - pattern: encodeURIComponent(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: $X.replace(...)
+      - pattern: $X.replaceAll(...)
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^.*(sanitize|escape|encode|redact|printable).*$
+    pattern-sinks:
+      - patterns:
+          - pattern: console.$M(..., $SINK, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(log|info|warn|error|debug|trace|verbose|fatal)$
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern: $LOG.$M(..., $SINK, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(log|info|warn|error|debug|trace|verbose|fatal)$
+          - metavariable-regex:
+              metavariable: $LOG
+              regex: (?i)^(log|logger|winston|pino|bunyan|logging|this\.log|this\.logger)$
+          - focus-metavariable: $SINK
+
+  - id: fortify.denial-of-service-regular-expression
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Denial of Service: Regular Expression: the pattern $SINK is built from request data, so a request
+      can supply a pattern that never finishes. Match request data against fixed patterns; escape it
+      when it must be part of one.
+    metadata:
+      fortify:
+        category: "Denial of Service: Regular Expression"
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data becomes a regular expression.
+      cwe: ["CWE-1333", "CWE-400"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest|ctx\.request|context\.request)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|rawHeaders|query|params|body|cookies|hostname|host|rawBody)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - pattern: '($REQ: Http2ServerRequest).$PROP'
+      - pattern: '($REQ: Request).$PROP'
+      - pattern: process.argv
+      - pattern: process.argv[...]
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^.*escape.*$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new RegExp($SINK, ...)
+              - pattern: RegExp($SINK, ...)
+          - focus-metavariable: $SINK
+
+  - id: fortify.dynamic-code-evaluation-code-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Dynamic Code Evaluation: Code Injection: $SINK is run as code and carries data from a request, the
+      page's URL, a posted message or the command line. Do not run data as code; dispatch on an
+      allow-list instead.
+    metadata:
+      fortify:
+        category: "Dynamic Code Evaluation: Code Injection"
+        kingdom: Input Validation and Representation
+        impact: "5.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data is compiled or run as code.
+      cwe: ["CWE-94", "CWE-95"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|query|params|body|cookies|hostname|host)$
+      - pattern: process.argv
+      - pattern: process.argv[...]
+      - patterns:
+          - pattern-either:
+              - pattern: location.$P
+              - pattern: window.location.$P
+              - pattern: document.URL
+              - pattern: document.referrer
+              - pattern: window.name
+          - metavariable-regex:
+              metavariable: $P
+              regex: ^(hash|search|href)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $W.addEventListener("message", function $F($E) { ... })
+              - pattern-inside: |
+                  $W.addEventListener("message", function ($E) { ... })
+              - pattern-inside: |
+                  $W.addEventListener("message", ($E) => { ... })
+              - pattern-inside: |
+                  $W.onmessage = ($E) => { ... }
+              - pattern-inside: |
+                  $W.onmessage = function ($E) { ... }
+          - pattern: $E.data
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: eval($SINK)
+              - pattern: new Function(..., $SINK)
+              - pattern: Function(..., $SINK)
+              - pattern: setTimeout($SINK, ...)
+              - pattern: setInterval($SINK, ...)
+              - pattern: new $VM.Script($SINK, ...)
+              - pattern: new Script($SINK, ...)
+              - pattern: runInNewContext($SINK, ...)
+              - pattern: runInThisContext($SINK, ...)
+              - pattern: compileFunction($SINK, ...)
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern: $VM.$M($SINK, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(runInNewContext|runInThisContext|runInContext|compileFunction)$
+          - focus-metavariable: $SINK
+
+  - id: fortify.sql-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      SQL Injection: the query $SINK is built from request data. Use a parameterized query; never put
+      request data into the SQL text.
+    metadata:
+      fortify:
+        category: SQL Injection
+        kingdom: Input Validation and Representation
+        impact: "5.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data becomes part of an SQL statement.
+      cwe: ["CWE-89"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest|ctx\.request|context\.request)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|rawHeaders|query|params|body|cookies|hostname|host|rawBody)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - pattern: '($REQ: Http2ServerRequest).$PROP'
+      - pattern: '($REQ: Request).$PROP'
+      - pattern: process.argv
+      - pattern: process.argv[...]
+    pattern-sanitizers:
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: $DB.escape(...)
+      - pattern: escape(...)
+      - pattern: escapeId(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.$M($SINK, ...)
+              - pattern: '$DB.$M({..., text: $SINK, ...}, ...)'
+              - pattern: '$DB.$M({..., sql: $SINK, ...}, ...)'
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(query|execute|exec|raw|unsafe|prepare|queryRaw|executeRaw|\$queryRawUnsafe|\$executeRawUnsafe)$
+          - metavariable-regex:
+              metavariable: $DB
+              regex: (?i)^(.*\.)?(db|database|pool|client|conn|connection|knex|sequelize|prisma|pg|mysql|sql|sqlite|stmt|statement|tx|trx|session|cursor)$
+          - focus-metavariable: $SINK
+
+  - id: fortify.resource-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Resource Injection: request data chooses the port, host or address the program binds or connects
+      to ($SINK). Take the resource from configuration, or allow-list the values.
+    metadata:
+      fortify:
+        category: Resource Injection
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data chooses a network resource the program uses.
+      cwe: ["CWE-99"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest|ctx\.request|context\.request)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|rawHeaders|query|params|body|cookies|hostname|host|rawBody)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - pattern: '($REQ: Http2ServerRequest).$PROP'
+      - pattern: '($REQ: Request).$PROP'
+      - pattern: process.argv
+      - pattern: process.argv[...]
+    pattern-sanitizers:
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $S.listen($SINK, ...)
+              - pattern: '$N.connect({..., host: $SINK, ...}, ...)'
+              - pattern: '$N.connect({..., port: $SINK, ...}, ...)'
+              - pattern: '$N.createConnection({..., host: $SINK, ...}, ...)'
+              - pattern: '$N.createConnection({..., port: $SINK, ...}, ...)'
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern-either:
+              - pattern: $N.connect($SINK, ...)
+              - pattern: $N.createConnection($SINK, ...)
+          - metavariable-regex:
+              metavariable: $N
+              regex: (?i)^(net|tls|socket|sock|dgram|dns|tcp|udp|client|conn|connection|redis|amqp|mqtt|mongoose|knex|pool)$
+          - focus-metavariable: $SINK
+
+  - id: fortify.setting-manipulation
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Setting Manipulation: request data is written into the process environment or a setting ($SINK),
+      so a request changes how the program and its children behave. Settings come from configuration.
+    metadata:
+      fortify:
+        category: Setting Manipulation
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data overwrites a system or application setting.
+      cwe: ["CWE-15"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest|ctx\.request|context\.request)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|rawHeaders|query|params|body|cookies|hostname|host|rawBody)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+      - pattern: '($REQ: Http2ServerRequest).$PROP'
+      - pattern: '($REQ: Request).$PROP'
+      - pattern: process.argv
+      - pattern: process.argv[...]
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: process.env.$K = $SINK
+              - pattern: process.env[$K] = $SINK
+              - pattern: process.env[$SINK] = $V
+              - pattern: process.chdir($SINK)
+              - pattern: process.umask($SINK)
+          - focus-metavariable: $SINK
