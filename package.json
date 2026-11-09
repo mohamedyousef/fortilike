@@ -5,14 +5,28 @@
   "license": "UNLICENSED",
   "private": true,
   "type": "module",
-  "bin": { "fortilike": "bin/fortilike" },
-  "files": ["bin", "src", "rules", "taxonomy", "README.md"],
-  "engines": { "node": ">=20.19.0" },
+  "bin": {
+    "fortilike": "bin/fortilike"
+  },
+  "files": [
+    "bin",
+    "src",
+    "rules",
+    "taxonomy",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "scan": "node bin/fortilike scan",
-    "test": "node bin/fortilike test-rules",
-    "list": "node bin/fortilike list-rules"
+    "test": "node bin/fortilike test-rules && node --test test/*.test.mjs",
+    "list": "node bin/fortilike list-rules",
+    "test:dataflow": "node --test test/*.test.mjs"
   },
   "dependencies": {},
-  "devDependencies": {}
+  "devDependencies": {},
+  "optionalDependencies": {
+    "typescript": "^6.0.3"
+  }
 }
