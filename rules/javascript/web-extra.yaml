@@ -1,0 +1,326 @@
+# A third batch: archives, cookies, credentials, framing, CSRF, XML and request bodies.
+rules:
+  - id: fortify.path-manipulation-zip-entry-overwrite
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Path Manipulation: Zip Entry Overwrite: an archive entry's own name decides where it is written
+      ($SINK). A name such as ../../etc/cron.d/x escapes the extraction folder. Resolve the path and
+      check it stays under the folder before writing.
+    metadata:
+      fortify:
+        category: "Path Manipulation: Zip Entry Overwrite"
+        kingdom: Input Validation and Representation
+        impact: "4.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: An archive entry name is used as a file path without being confined.
+      cwe: ["CWE-22"]
+      owasp: ["A01:2021 Broken Access Control"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $E.entryName
+              - pattern: $E.fileName
+              - pattern: $E.path
+              - pattern: $E.name
+              - pattern: $E.header.name
+          - metavariable-regex:
+              metavariable: $E
+              regex: (?i)^(entry|zipEntry|file|header|item|e)$
+    pattern-sanitizers:
+      - pattern: basename(...)
+      - pattern: $P.basename(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $FS.$M($SINK, ...)
+              - pattern: $M($SINK, ...)
+              - pattern: $Z.extractEntryTo($EN, $SINK, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(writeFile|writeFileSync|createWriteStream|mkdir|mkdirSync|open|openSync|copyFile|copyFileSync|rename|renameSync|extractEntryTo)$
+          - focus-metavariable: $SINK
+
+  - id: fortify.header-manipulation-cookies
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Header Manipulation: Cookies: request data becomes a cookie's value ($SINK). The client chooses
+      what the server later reads back as its own state. Set cookies from values the server made.
+    metadata:
+      fortify:
+        category: "Header Manipulation: Cookies"
+        kingdom: Input Validation and Representation
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: Untrusted data is written into a Set-Cookie header.
+      cwe: ["CWE-113", "CWE-20"]
+      owasp: ["A03:2021 Injection"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.$PROP
+              - pattern: $REQ.$PROP[...]
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|message|msg|incoming|httpRequest)$
+          - metavariable-regex:
+              metavariable: $PROP
+              regex: ^(url|originalUrl|path|headers|query|params|body|cookies)$
+      - pattern: '($REQ: IncomingMessage).$PROP'
+    pattern-sanitizers:
+      - pattern: encodeURIComponent(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.cookie($N, $SINK, ...)
+              - pattern: $RES.setHeader("$H", $SINK)
+              - pattern: $RES.header("$H", $SINK)
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^set-cookie$
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern: $RES.cookie($N, $SINK, ...)
+          - focus-metavariable: $SINK
+
+  - id: fortify.password-management-null-password
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Password Management: Null Password: $K is set to null or undefined, so the credential is missing
+      rather than configured. Make the field absent and fail loudly when it is required.
+    metadata:
+      fortify:
+        category: "Password Management: Null Password"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A credential-named variable or property is null.
+      cwe: ["CWE-259"]
+      owasp: ["A07:2021 Identification and Authentication Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              { ..., $K: null, ... }
+          - pattern: $K = null
+          - pattern: $O.$K = null
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i)^.*(password|passwd|pwd|passphrase|client[_-]?secret|api[_-]?key)$
+
+  - id: fortify.password-management-weak-cryptography
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Password Management: Weak Cryptography: a credential is encoded (base64) rather than
+      encrypted or hashed; encoding is reversible by anyone. Hash passwords with scrypt or argon2;
+      encrypt stored secrets with a key from a secret store.
+    metadata:
+      fortify:
+        category: "Password Management: Weak Cryptography"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A credential is obscured with an encoding, not protected with cryptography.
+      cwe: ["CWE-261"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: btoa($P)
+          - pattern: Buffer.from($P).toString("base64")
+          - pattern: Buffer.from($P, ...).toString("base64")
+          - pattern: $P.toString("base64")
+      - metavariable-regex:
+          metavariable: $P
+          regex: (?i)^(.*\.)?(password|passwd|pwd|passphrase|secret|clientSecret|client_secret)$
+
+  - id: fortify.credential-management-hardcoded-api-credentials
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Credential Management: Hardcoded API Credentials: an Authorization header value is written in
+      the code. It is in every copy of the program and cannot be rotated. Read it from configuration.
+    metadata:
+      fortify:
+        category: "Credential Management: Hardcoded API Credentials"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "4.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: An Authorization header carries a literal credential.
+      cwe: ["CWE-798"]
+      owasp: ["A07:2021 Identification and Authentication Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              { ..., $H: "$V", ... }
+          - pattern: $X.setRequestHeader("$H", "$V")
+          - pattern: $X.set("$H", "$V")
+          - pattern: $X.append("$H", "$V")
+          - pattern: $X.setHeader("$H", "$V")
+      - metavariable-regex:
+          metavariable: $H
+          regex: (?i)^["']?(authorization|x-api-key|api-key|apikey|x-auth-token|x-access-token)["']?$
+      - metavariable-regex:
+          metavariable: $V
+          regex: ^(?i:bearer|basic|token|apikey|api-key)?\s*[A-Za-z0-9+/=_.-]{16,}$
+
+  - id: fortify.cross-frame-scripting
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Cross-Frame Scripting: the page may be framed by any site (frameguard off, or X-Frame-Options
+      ALLOWALL / an open frame-ancestors), so a hostile page can overlay and click-jack it. Keep
+      frameguard, or set frame-ancestors to the sites that may frame it.
+    metadata:
+      fortify:
+        category: Cross-Frame Scripting
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "4.0"
+        abstract: Framing protection is turned off or opened to every origin.
+      cwe: ["CWE-1021"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - pattern: 'helmet({ ..., frameguard: false, ... })'
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", "$V")
+              - pattern: $RES.header("$H", "$V")
+              - pattern: |
+                  { ..., "$H": "$V", ... }
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^x-frame-options$
+          - metavariable-regex:
+              metavariable: $V
+              regex: (?i)^allowall$
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", "$V")
+              - pattern: $RES.header("$H", "$V")
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^content-security-policy$
+          - metavariable-regex:
+              metavariable: $V
+              regex: (?i).*frame-ancestors\s+\*.*
+
+  - id: fortify.cross-site-request-forgery
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Cross-Site Request Forgery: the app keeps a cookie session but this file loads no CSRF
+      protection, so a page on another site can post requests the browser authenticates. Add a CSRF
+      token check (csurf or a same-site double-submit token) and SameSite on the session cookie.
+    metadata:
+      fortify:
+        category: Cross-Site Request Forgery
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "3.0"
+        confidence: "3.0"
+        abstract: A cookie session is set up with no CSRF defence in the same file.
+      cwe: ["CWE-352"]
+      owasp: ["A01:2021 Broken Access Control"]
+    patterns:
+      - pattern-either:
+          - pattern: $APP.use(session(...))
+          - pattern: $APP.use(cookieSession(...))
+          - pattern: $APP.use(expressSession(...))
+      - pattern-not-inside: |
+          $CSRF = require("csurf")
+          ...
+      - pattern-not-inside: |
+          import $CSRF from "csurf"
+          ...
+      - pattern-not-inside: |
+          $CSRF = require("csrf-csrf")
+          ...
+      - pattern-not-inside: |
+          import { ... } from "csrf-csrf"
+          ...
+      - pattern-not-inside: |
+          $CSRF = require("lusca")
+          ...
+      - pattern-not-inside: |
+          import $CSRF from "lusca"
+          ...
+      - pattern-not-inside: |
+          $APP.use(session({ ..., cookie: { ..., sameSite: "strict", ... }, ... }))
+          ...
+
+  - id: fortify.xml-external-entity-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      XML External Entity Injection: the XML parser resolves external entities, so a document can read
+      local files or reach internal hosts through the server. Turn entity resolution off (noent:
+      false, or a parser that never resolves entities).
+    metadata:
+      fortify:
+        category: XML External Entity Injection
+        kingdom: Input Validation and Representation
+        impact: "4.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: An XML parser is configured to resolve external entities.
+      cwe: ["CWE-611"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - pattern: '$X.parseXml($D, { ..., noent: true, ... })'
+      - pattern: '$X.parseXmlString($D, { ..., noent: true, ... })'
+      - pattern: '$X.parseHtml($D, { ..., noent: true, ... })'
+      - pattern: 'parseXml($D, { ..., noent: true, ... })'
+      - pattern: 'new $P({ ..., resolveExternalEntities: true, ... })'
+      - pattern: 'new $P({ ..., externalEntities: true, ... })'
+
+  - id: fortify.denial-of-service-unbounded-request-body
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Denial of Service: the body parser has no size limit beyond its default, or raises it, so one
+      request can hold megabytes in memory per connection. Set a limit that matches what the route
+      needs.
+    metadata:
+      fortify:
+        category: Denial of Service
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "3.0"
+        confidence: "3.0"
+        abstract: A request body is accepted with a very large or missing size limit.
+      cwe: ["CWE-400", "CWE-770"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: '$E.json({ ..., limit: "$L", ... })'
+              - pattern: '$E.urlencoded({ ..., limit: "$L", ... })'
+              - pattern: '$E.raw({ ..., limit: "$L", ... })'
+              - pattern: '$E.text({ ..., limit: "$L", ... })'
+              - pattern: '$B.json({ ..., limit: "$L", ... })'
+          - metavariable-regex:
+              metavariable: $L
+              regex: (?i)^(\d{3,}mb|\d+gb|[5-9]\d mb|[1-9]\d{2,}\s*mb)$
+      - pattern: '$E.json({ ..., limit: Infinity, ... })'
+      - pattern: '$E.raw({ ..., limit: Infinity, ... })'
