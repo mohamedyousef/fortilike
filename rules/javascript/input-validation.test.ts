@@ -11,6 +11,9 @@ declare function escapeHtml(text: string): string;
 declare function escapeRegExp(text: string): string;
 declare const db: { query(...args: unknown[]): unknown };
 declare const server: { listen(...args: unknown[]): unknown };
+declare function trustedExecutable(path: string): string;
+declare function trustedDirectory(path: string): string;
+declare function sameOriginUrl(origin: string, raw: string): URL;
 
 createServer((request, response) => {
   const url = new URL(request.url ?? '/', 'http://app.invalid');
@@ -48,6 +51,8 @@ createServer((request, response) => {
   fetch('https://api.example.com/items?id=' + encodeURIComponent(header));
   // ok: fortify.server-side-request-forgery
   fetch('https://api.example.com/items');
+  // ok: fortify.server-side-request-forgery
+  fetch(sameOriginUrl('http://127.0.0.1:4200', request.url ?? '/'));
 
   // ruleid: fortify.open-redirect
   response.setHeader('Location', url.searchParams.get('next') ?? '/');
@@ -114,3 +119,7 @@ execSync('open ' + input);
 spawn(process.env.BROWSER ?? 'open', [input]);
 // ok: fortify.command-injection
 spawn('open', [input]);
+// ok: fortify.command-injection
+spawn(trustedExecutable(process.env.MINIKIT_DART_CLI ?? 'minikit'), [input]);
+// ok: fortify.path-manipulation
+readFileSync(trustedDirectory(input) + '/package.json');

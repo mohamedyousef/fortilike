@@ -39,6 +39,11 @@ rules:
       - pattern: process.argv
       - pattern: process.argv[...]
     pattern-sanitizers:
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^.*(trusted|allowlist|allow_list|whitelist|sameorigin|same_origin|validated?|sanitiz).*$
       - pattern: basename(...)
       - pattern: $P.basename(...)
       - pattern: Number(...)
@@ -98,6 +103,11 @@ rules:
       - pattern: process.env.$X
       - pattern: process.env[...]
     pattern-sanitizers:
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^.*(trusted|allowlist|allow_list|whitelist|sameorigin|same_origin|validated?|sanitiz).*$
       - pattern: Number(...)
       - pattern: parseInt(...)
     pattern-sinks:
@@ -161,6 +171,11 @@ rules:
       - pattern: process.argv
       - pattern: process.argv[...]
     pattern-sanitizers:
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^.*(trusted|allowlist|allow_list|whitelist|sameorigin|same_origin|validated?|sanitiz).*$
       - pattern: encodeURIComponent(...)
       - pattern: Number(...)
     pattern-sinks:
