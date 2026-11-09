@@ -1,0 +1,1212 @@
+# Categories added with Fortify rulepack 26.x in mind: cookie SameSite / domain / path, YAML, GraphQL,
+# Handlebars and Helmet configuration, deprecated and missing security headers, key material for HMAC
+# and password-based encryption, IVs and stream ciphers, non-PQC algorithms, console output, React
+# dangerouslySetInnerHTML, Content-Length, LLM token limits, script injection,
+# document.domain, poorly validated HTML, reflected CORS origins and reverse DNS.
+rules:
+  # ---------------------------------------------------------------- cookies
+  - id: fortify.cookie-security-missing-samesite-attribute
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Cookie Security: Missing SameSite Attribute: the cookie is set without a SameSite attribute, so
+      browsers that do not default to Lax send it on cross-site requests and a forged request carries
+      the session. Set sameSite to 'lax' or 'strict'.
+    metadata:
+      fortify:
+        category: "Cookie Security: Missing SameSite Attribute"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A cookie is set without the SameSite attribute.
+      cwe: ["CWE-1275"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.cookie($N, $V)
+              - pattern: $RES.cookie($N, $V, $OPTS)
+          - pattern-not: '$RES.cookie($N, $V, { ..., sameSite: $S, ... })'
+      - patterns:
+          - pattern-either:
+              - pattern: $REP.setCookie($N, $V)
+              - pattern: $REP.setCookie($N, $V, $OPTS)
+          - pattern-not: '$REP.setCookie($N, $V, { ..., sameSite: $S, ... })'
+      - patterns:
+          - pattern-either:
+              - pattern: $C.set($N, $V)
+              - pattern: $C.set($N, $V, $OPTS)
+          - pattern-not: '$C.set($N, $V, { ..., sameSite: $S, ... })'
+          - metavariable-regex:
+              metavariable: $C
+              regex: (?i)^(cookies?|cookieJar|cookieStore)$
+      - patterns:
+          - pattern: new Cookie({ ... })
+          - pattern-not: 'new Cookie({ ..., sameSite: $S, ... })'
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", "$C")
+              - pattern: $RES.header("$H", "$C")
+              - pattern: $RES.set("$H", "$C")
+              - pattern: '$RES.writeHead($S, { ..., "$H": "$C", ... })'
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^set-cookie$
+          - metavariable-regex:
+              metavariable: $C
+              regex: (?i)^(?!.*;\s*samesite=).*$
+
+  - id: fortify.cookie-security-overly-permissive-samesite-attribute
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Cookie Security: Overly Permissive SameSite Attribute: SameSite=None sends the cookie on every
+      cross-site request, which removes the browser's protection against cross-site request forgery.
+      Use 'lax' or 'strict' unless the cookie must be embedded cross-site.
+    metadata:
+      fortify:
+        category: "Cookie Security: Overly Permissive SameSite Attribute"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A cookie is set with SameSite=None.
+      cwe: ["CWE-1275"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - patterns:
+          - pattern: '{ ..., sameSite: "$S", ... }'
+          - metavariable-regex:
+              metavariable: $S
+              regex: (?i)^none$
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", "$C")
+              - pattern: $RES.header("$H", "$C")
+              - pattern: $RES.set("$H", "$C")
+              - pattern: '$RES.writeHead($S, { ..., "$H": "$C", ... })'
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^set-cookie$
+          - metavariable-regex:
+              metavariable: $C
+              regex: (?i).*;\s*samesite=none.*
+
+  - id: fortify.cookie-security-overly-broad-domain
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Cookie Security: Overly Broad Domain: the cookie's Domain starts with a dot, so every subdomain
+      (including ones run by other teams or an attacker-controlled host) receives it. Leave Domain
+      unset so the cookie stays with the host that issued it.
+    metadata:
+      fortify:
+        category: "Cookie Security: Overly Broad Domain"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "2.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A cookie is scoped to a parent domain and all of its subdomains.
+      cwe: ["CWE-1004", "CWE-287"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - patterns:
+          - pattern: '{ ..., domain: "$D", ... }'
+          - metavariable-regex:
+              metavariable: $D
+              regex: ^\..+
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", "$C")
+              - pattern: $RES.header("$H", "$C")
+              - pattern: $RES.set("$H", "$C")
+              - pattern: '$RES.writeHead($S, { ..., "$H": "$C", ... })'
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^set-cookie$
+          - metavariable-regex:
+              metavariable: $C
+              regex: (?i).*;\s*domain=\..*
+
+  - id: fortify.cookie-security-overly-broad-path
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Cookie Security: Overly Broad Path: the cookie is scoped to '/', so every application served
+      from the same host reads it. Set Path to the application's own prefix.
+    metadata:
+      fortify:
+        category: "Cookie Security: Overly Broad Path"
+        kingdom: Security Features
+        impact: "1.0"
+        probability: "2.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A cookie is scoped to the root path of the host.
+      cwe: ["CWE-1004"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - pattern: '$RES.cookie($N, $V, { ..., path: "/", ... })'
+      - pattern: '$REP.setCookie($N, $V, { ..., path: "/", ... })'
+      - pattern: '$REP.clearCookie($N, { ..., path: "/", ... })'
+      - patterns:
+          - pattern: '$C.set($N, $V, { ..., path: "/", ... })'
+          - metavariable-regex:
+              metavariable: $C
+              regex: (?i)^(cookies?|cookieJar|cookieStore)$
+      - pattern: 'new Cookie({ ..., path: "/", ... })'
+      - pattern: '$S({ ..., cookie: { ..., path: "/", ... }, ... })'
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", "$C")
+              - pattern: $RES.header("$H", "$C")
+              - pattern: $RES.set("$H", "$C")
+              - pattern: '$RES.writeHead($S, { ..., "$H": "$C", ... })'
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^set-cookie$
+          - metavariable-regex:
+              metavariable: $C
+              regex: (?i).*;\s*path=/\s*(;.*)?$
+
+  # ---------------------------------------------------------------- yaml
+  - id: fortify.dynamic-code-evaluation-unsafe-yaml-deserialization
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Dynamic Code Evaluation: Unsafe YAML Deserialization: js-yaml's load() runs with the default
+      schema, which in older versions instantiates JavaScript types (!!js/function) from the document,
+      so a crafted file runs code. Pass { schema: JSON_SCHEMA } (or FAILSAFE_SCHEMA), or use safeLoad.
+    metadata:
+      fortify:
+        category: "Dynamic Code Evaluation: Unsafe YAML Deserialization"
+        kingdom: Input Validation and Representation
+        impact: "4.0"
+        probability: "2.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: YAML is parsed with a schema that can create arbitrary JavaScript values.
+      cwe: ["CWE-502"]
+      owasp: ["A08:2021 Software and Data Integrity Failures"]
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $Y.$F($X)
+              - pattern: $Y.$F($X, $O)
+          - pattern-not: '$Y.$F($X, { ..., schema: $S, ... })'
+          - metavariable-regex:
+              metavariable: $Y
+              regex: ^(yaml|jsyaml|jsYaml|js_yaml|YAML)$
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(load|loadAll)$
+      - patterns:
+          - pattern-either:
+              - pattern: require("js-yaml").$F($X)
+              - pattern: require("js-yaml").$F($X, $O)
+          - pattern-not: 'require("js-yaml").$F($X, { ..., schema: $S, ... })'
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(load|loadAll)$
+
+  # ---------------------------------------------------------------- GraphQL
+  - id: fortify.graphql-bad-practices-graphiql-enabled
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      GraphQL Bad Practices: GraphiQL Enabled: the GraphiQL explorer is served, which hands anyone who
+      finds the endpoint a schema browser and a query console. Turn it off outside development.
+    metadata:
+      fortify:
+        category: "GraphQL Bad Practices: GraphiQL Enabled"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A GraphQL server is configured to serve the GraphiQL explorer.
+      cwe: ["CWE-489"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - pattern: '{ ..., graphiql: true, ... }'
+      - pattern: '{ ..., graphiql: { ... }, ... }'
+
+  - id: fortify.graphql-bad-practices-introspection-enabled
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      GraphQL Bad Practices: Introspection Enabled: schema introspection is turned on explicitly, so a
+      client enumerates every type, field and mutation before attacking them. Disable introspection
+      in production (introspection: process.env.NODE_ENV !== 'production').
+    metadata:
+      fortify:
+        category: "GraphQL Bad Practices: Introspection Enabled"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A GraphQL server exposes schema introspection.
+      cwe: ["CWE-200"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern: '{ ..., introspection: true, ... }'
+
+  # ---------------------------------------------------------------- Handlebars
+  - id: fortify.handlebars-misconfiguration-escaping-disabled
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Handlebars Misconfiguration: Escaping Disabled: noEscape turns off HTML escaping for every
+      {{expression}} in the template, so any value that reaches the template becomes markup. Keep
+      escaping on and use {{{triple-stash}}} only for trusted, pre-sanitized HTML.
+    metadata:
+      fortify:
+        category: "Handlebars Misconfiguration: Escaping Disabled"
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: Handlebars is compiled with HTML escaping disabled.
+      cwe: ["CWE-79", "CWE-116"]
+      owasp: ["A03:2021 Injection"]
+    pattern: '{ ..., noEscape: true, ... }'
+
+  - id: fortify.handlebars-misconfiguration-prototypes-allowed
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Handlebars Misconfiguration: Prototypes Allowed: allowProtoPropertiesByDefault /
+      allowProtoMethodsByDefault let templates reach prototype members of the context objects, the
+      path to remote code execution in older Handlebars. Leave the defaults and allow-list only the
+      members a template needs.
+    metadata:
+      fortify:
+        category: "Handlebars Misconfiguration: Prototypes Allowed"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: Handlebars templates may access prototype properties or methods.
+      cwe: ["CWE-1321", "CWE-94"]
+      owasp: ["A08:2021 Software and Data Integrity Failures"]
+    pattern-either:
+      - pattern: '{ ..., allowProtoPropertiesByDefault: true, ... }'
+      - pattern: '{ ..., allowProtoMethodsByDefault: true, ... }'
+
+  # ---------------------------------------------------------------- Helmet / headers
+  - id: fortify.helmet-misconfiguration-insecure-xss-filter
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Helmet Misconfiguration: Insecure XSS Filter: setOnOldIE or mode null turns the browser's XSS
+      auditor on without block mode, and that filter itself has been used to leak data in old
+      Internet Explorer. Remove the option; modern browsers no longer ship the filter.
+    metadata:
+      fortify:
+        category: "Helmet Misconfiguration: Insecure XSS Filter"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: Helmet's X-XSS-Protection header is configured in an insecure mode.
+      cwe: ["CWE-16", "CWE-79"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - pattern: '{ ..., setOnOldIE: true, ... }'
+      - pattern: '{ ..., xssFilter: { ..., mode: null, ... }, ... }'
+      - pattern: '$H.xssFilter({ ..., mode: null, ... })'
+
+  - id: fortify.html5-cross-site-scripting-protection
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      HTML5: Cross-Site Scripting Protection: the X-XSS-Protection header is set to 0 (or helmet's
+      xssFilter is disabled), which switches off the reflected-XSS filter in the browsers that still
+      have one. Remove the explicit opt-out, or rely on a Content-Security-Policy instead.
+    metadata:
+      fortify:
+        category: "HTML5: Cross-Site Scripting Protection"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: The browser's cross-site scripting filter is explicitly disabled.
+      cwe: ["CWE-79", "CWE-16"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - pattern: '{ ..., xssFilter: false, ... }'
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", $V)
+              - pattern: $RES.header("$H", $V)
+              - pattern: $RES.set("$H", $V)
+              - pattern: '$RES.writeHead($S, { ..., "$H": $V, ... })'
+              - pattern: '{ ..., headers: { ..., "$H": $V, ... }, ... }'
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^x-xss-protection$
+          - metavariable-regex:
+              metavariable: $V
+              regex: ^['"]?0['"]?$
+
+  - id: fortify.html5-deprecated-header
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      HTML5: Deprecated Header: Public-Key-Pins and Expect-CT are no longer honoured by browsers (HPKP
+      was removed, Expect-CT retired in 2023), so the header gives a false sense of protection and
+      HPKP can lock users out. Remove it; use Certificate Transparency monitoring instead.
+    metadata:
+      fortify:
+        category: "HTML5: Deprecated Header"
+        kingdom: Security Features
+        impact: "1.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A response sets a security header that browsers no longer support.
+      cwe: ["CWE-16"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", $V)
+              - pattern: $RES.header("$H", $V)
+              - pattern: $RES.set("$H", $V)
+              - pattern: '$RES.writeHead($S, { ..., "$H": $V, ... })'
+              - pattern: '{ ..., headers: { ..., "$H": $V, ... }, ... }'
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^(public-key-pins(-report-only)?|expect-ct)$
+      - patterns:
+          - pattern: '{ ..., expectCt: $V, ... }'
+          - pattern-not: '{ ..., expectCt: false, ... }'
+      - patterns:
+          - pattern: '{ ..., hpkp: $V, ... }'
+          - pattern-not: '{ ..., hpkp: false, ... }'
+      - pattern: $H.expectCt(...)
+      - pattern: $H.hpkp(...)
+
+  - id: fortify.html5-mime-sniffing
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      HTML5: MIME Sniffing: X-Content-Type-Options is not 'nosniff' (or helmet's noSniff is turned
+      off), so browsers may guess a content type and run an upload or JSON response as script.
+      Send X-Content-Type-Options: nosniff on every response.
+    metadata:
+      fortify:
+        category: "HTML5: MIME Sniffing"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: Responses allow the browser to sniff the content type.
+      cwe: ["CWE-16", "CWE-430"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - pattern: '{ ..., noSniff: false, ... }'
+      - pattern: '{ ..., xContentTypeOptions: false, ... }'
+      - pattern: '{ ..., contentTypeOptions: false, ... }'
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", "$V")
+              - pattern: $RES.header("$H", "$V")
+              - pattern: $RES.set("$H", "$V")
+              - pattern: '$RES.writeHead($S, { ..., "$H": "$V", ... })'
+              - pattern: '{ ..., headers: { ..., "$H": "$V", ... }, ... }'
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^x-content-type-options$
+          - metavariable-regex:
+              metavariable: $V
+              regex: (?i)^(?!nosniff$).*$
+
+  - id: fortify.insecure-transport-hsts-not-set
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Insecure Transport: HSTS not Set: Strict-Transport-Security is disabled in helmet, so the first
+      request over plain HTTP (and every one after a downgrade) can be intercepted. Leave hsts on with
+      a maxAge of at least a year and includeSubDomains.
+    metadata:
+      fortify:
+        category: "Insecure Transport: HSTS not Set"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: The HTTP Strict Transport Security header is explicitly turned off.
+      cwe: ["CWE-319", "CWE-523"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern-either:
+      - pattern: '{ ..., hsts: false, ... }'
+      - pattern: '{ ..., strictTransportSecurity: false, ... }'
+      - pattern: '{ ..., hsts: { ..., maxAge: 0, ... }, ... }'
+
+  # ---------------------------------------------------------------- browser storage
+  - id: fortify.html5-easy-to-guess-database-name
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      HTML5: Easy-to-Guess Database Name: the client-side database is opened by a fixed literal name,
+      so any script that runs in the origin (an XSS, a compromised third-party tag) knows where the
+      data lives. Derive the name from the signed-in user or session and keep sensitive data server-side.
+    metadata:
+      fortify:
+        category: "HTML5: Easy-to-Guess Database Name"
+        kingdom: Security Features
+        impact: "1.0"
+        probability: "2.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A browser database is opened with a hardcoded name.
+      cwe: ["CWE-922"]
+      owasp: ["A04:2021 Insecure Design"]
+    pattern-either:
+      - pattern: indexedDB.open("...", ...)
+      - pattern: window.indexedDB.open("...", ...)
+      - pattern: self.indexedDB.open("...", ...)
+      - pattern: globalThis.indexedDB.open("...", ...)
+      - pattern: openDatabase("...", ...)
+      - pattern: window.openDatabase("...", ...)
+
+  # ---------------------------------------------------------------- TLS strength
+  - id: fortify.insecure-transport-weak-ssl-cipher
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Insecure Transport: Weak SSL Cipher: the cipher list enables RC4, DES/3DES, export, anonymous,
+      NULL or MD5-based suites, which are broken or offer no authentication. Use Node's default list
+      or restrict to AEAD suites (ECDHE + AES-GCM / CHACHA20-POLY1305).
+    metadata:
+      fortify:
+        category: "Insecure Transport: Weak SSL Cipher"
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A TLS configuration enables a weak cipher suite.
+      cwe: ["CWE-327", "CWE-326"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern: '{ ..., ciphers: "$C", ... }'
+      - metavariable-regex:
+          metavariable: $C
+          regex: (?i)^(.*[:,\s+])?(RC4|DES|3DES|DES-CBC3|NULL|EXPORT|EXP|MD5|aNULL|eNULL|ADH|AECDH|anon)([-:,\s+]|$).*
+
+  - id: fortify.insecure-transport-insufficient-diffie-hellman-strength
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Insecure Transport: Insufficient Diffie Hellman Strength: a Diffie-Hellman group shorter than
+      2048 bits is generated, which Logjam-class attacks break. Use 2048 bits or more, or a named
+      elliptic-curve group (createECDH / x25519).
+    metadata:
+      fortify:
+        category: "Insecure Transport: Insufficient Diffie Hellman Strength"
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A Diffie-Hellman key exchange uses a prime shorter than 2048 bits.
+      cwe: ["CWE-326"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: createDiffieHellman($N, ...)
+          - pattern: $C.createDiffieHellman($N, ...)
+      - metavariable-comparison:
+          metavariable: $N
+          comparison: $N < 2048
+
+  # ---------------------------------------------------------------- key material
+  - id: fortify.key-management-hardcoded-hmac-key
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Key Management: Hardcoded HMAC Key: the HMAC key is a literal in the source, so everyone with the
+      code (or a build artifact) can forge authenticated messages and the key cannot be rotated without
+      a release. Load it from a secret store or the environment.
+    metadata:
+      fortify:
+        category: "Key Management: Hardcoded HMAC Key"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: An HMAC is keyed with a string literal.
+      cwe: ["CWE-321", "CWE-798"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: createHmac($ALG, "$K", ...)
+          - pattern: $C.createHmac($ALG, "$K", ...)
+          - pattern: createHmac($ALG, Buffer.from("$K", ...), ...)
+          - pattern: $C.createHmac($ALG, Buffer.from("$K", ...), ...)
+      - metavariable-regex:
+          metavariable: $K
+          regex: .+
+
+  - id: fortify.key-management-empty-hmac-key
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Key Management: Empty HMAC Key: the HMAC is keyed with an empty string, so the "authentication
+      code" is just a hash anyone can compute. Use a random key of at least the digest size.
+    metadata:
+      fortify:
+        category: "Key Management: Empty HMAC Key"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: An HMAC is keyed with an empty string.
+      cwe: ["CWE-321"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern-either:
+      - pattern: createHmac($ALG, "", ...)
+      - pattern: $C.createHmac($ALG, "", ...)
+      - pattern: createHmac($ALG, Buffer.alloc(0), ...)
+      - pattern: $C.createHmac($ALG, Buffer.alloc(0), ...)
+
+  - id: fortify.key-management-hardcoded-pbe-password
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Key Management: Hardcoded PBE Password: the password that derives the encryption key is a literal
+      in the source, so the derived key is as public as the code. Take the password from the user or a
+      secret store; never commit it.
+    metadata:
+      fortify:
+        category: "Key Management: Hardcoded PBE Password"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A password-based key derivation uses a string literal as the password.
+      cwe: ["CWE-321", "CWE-798"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: $F("$P", ...)
+          - pattern: $C.$F("$P", ...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(pbkdf2|pbkdf2Sync|scrypt|scryptSync|hkdf|hkdfSync)$
+      - metavariable-regex:
+          metavariable: $P
+          regex: .+
+
+  - id: fortify.key-management-empty-pbe-password
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Key Management: Empty PBE Password: the key is derived from an empty password, so anyone who
+      knows the salt and parameters recomputes it. Require a real password or a random key.
+    metadata:
+      fortify:
+        category: "Key Management: Empty PBE Password"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A password-based key derivation uses an empty password.
+      cwe: ["CWE-321", "CWE-258"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: $F("", ...)
+          - pattern: $C.$F("", ...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(pbkdf2|pbkdf2Sync|scrypt|scryptSync|hkdf|hkdfSync)$
+
+  - id: fortify.key-management-null-encryption-key
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Key Management: Null Encryption Key: the cipher is created with a null or undefined key, which
+      either throws at run time or (through a coercion) encrypts with a predictable key. Pass a key of
+      the algorithm's size drawn from a secret store or a key derivation function.
+    metadata:
+      fortify:
+        category: "Key Management: Null Encryption Key"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A cipher is keyed with null or undefined.
+      cwe: ["CWE-321"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: $F($ALG, null, ...)
+          - pattern: $C.$F($ALG, null, ...)
+          - pattern: $F($ALG, undefined, ...)
+          - pattern: $C.$F($ALG, undefined, ...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(createCipheriv|createDecipheriv|createHmac)$
+
+  # ---------------------------------------------------------------- password-based hashing
+  - id: fortify.weak-cryptographic-hash-empty-pbe-salt
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Weak Cryptographic Hash: Empty PBE Salt: the key derivation runs with an empty salt, so equal
+      passwords give equal hashes and one precomputed table covers every account. Use a random salt of
+      at least 16 bytes stored next to the hash.
+    metadata:
+      fortify:
+        category: "Weak Cryptographic Hash: Empty PBE Salt"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A password-based key derivation uses an empty salt.
+      cwe: ["CWE-759"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: $F($P, "", ...)
+          - pattern: $C.$F($P, "", ...)
+          - pattern: $F($P, Buffer.alloc(0), ...)
+          - pattern: $C.$F($P, Buffer.alloc(0), ...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(pbkdf2|pbkdf2Sync|scrypt|scryptSync)$
+
+  - id: fortify.weak-cryptographic-hash-insecure-pbe-iteration-count
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Weak Cryptographic Hash: Insecure PBE Iteration Count: PBKDF2 runs fewer than 10000 iterations,
+      so a GPU tries billions of guesses per second. Use at least 600000 iterations for SHA-256 (OWASP
+      2023), or switch to scrypt / Argon2.
+    metadata:
+      fortify:
+        category: "Weak Cryptographic Hash: Insecure PBE Iteration Count"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: PBKDF2 is configured with too few iterations.
+      cwe: ["CWE-916"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: $F($P, $S, $N, ...)
+          - pattern: $C.$F($P, $S, $N, ...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(pbkdf2|pbkdf2Sync)$
+      - metavariable-comparison:
+          metavariable: $N
+          comparison: $N < 10000
+
+  - id: fortify.weak-cryptographic-hash-predictable-salt
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Weak Cryptographic Hash: Predictable Salt: the salt is a timestamp, Math.random() or a user
+      identifier, all of which an attacker can know or guess, so the salt no longer defeats
+      precomputation. Draw the salt from crypto.randomBytes.
+    metadata:
+      fortify:
+        category: "Weak Cryptographic Hash: Predictable Salt"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A password hash is salted with a predictable value.
+      cwe: ["CWE-760"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: $F($P, $SALT, ...)
+          - pattern: $C.$F($P, $SALT, ...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(pbkdf2|pbkdf2Sync|scrypt|scryptSync)$
+      - metavariable-pattern:
+          metavariable: $SALT
+          pattern-either:
+            - pattern: Date.now()
+            - pattern: Math.random()
+            - pattern: new Date()
+            - pattern: new Date().getTime()
+            - pattern: new Date().toISOString()
+            - pattern: String(Date.now())
+            - pattern: String(Math.random())
+            - pattern: Date.now().toString(...)
+            - pattern: Math.random().toString(...)
+            - patterns:
+                - pattern: $ID
+                - metavariable-regex:
+                    metavariable: $ID
+                    regex: ^(user(name|Id|_id|ID)?|email|id|login)$
+            - patterns:
+                - pattern: $O.$ID
+                - metavariable-regex:
+                    metavariable: $ID
+                    regex: ^(user(name|Id|_id|ID)?|email|id|login)$
+
+  # ---------------------------------------------------------------- encryption
+  - id: fortify.weak-encryption-insecure-initialization-vector
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Weak Encryption: Insecure Initialization Vector: the IV is a constant (a literal, a zero buffer
+      or a hardcoded string), so two messages encrypted with the same key leak their relationship and
+      GCM/CTR nonce reuse breaks the cipher outright. Generate a fresh random IV per message with
+      crypto.randomBytes and store it with the ciphertext.
+    metadata:
+      fortify:
+        category: "Weak Encryption: Insecure Initialization Vector"
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A cipher is initialised with a constant IV.
+      cwe: ["CWE-329", "CWE-1204"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern-either:
+      - pattern: $C.createCipheriv($ALG, $KEY, "...", ...)
+      - pattern: createCipheriv($ALG, $KEY, "...", ...)
+      - pattern: $C.createCipheriv($ALG, $KEY, Buffer.alloc($N), ...)
+      - pattern: createCipheriv($ALG, $KEY, Buffer.alloc($N), ...)
+      - pattern: $C.createCipheriv($ALG, $KEY, Buffer.alloc($N, $FILL), ...)
+      - pattern: createCipheriv($ALG, $KEY, Buffer.alloc($N, $FILL), ...)
+      - pattern: $C.createCipheriv($ALG, $KEY, Buffer.from("...", ...), ...)
+      - pattern: createCipheriv($ALG, $KEY, Buffer.from("...", ...), ...)
+      - pattern: $C.createCipheriv($ALG, $KEY, new Uint8Array($N), ...)
+      - pattern: createCipheriv($ALG, $KEY, new Uint8Array($N), ...)
+      - patterns:
+          - pattern-either:
+              - pattern: $C.createCipheriv($ALG, $KEY, $IV, ...)
+              - pattern: createCipheriv($ALG, $KEY, $IV, ...)
+          - pattern-either:
+              - pattern-inside: |
+                  const $IV = "...";
+                  ...
+              - pattern-inside: |
+                  const $IV = Buffer.from("...", ...);
+                  ...
+              - pattern-inside: |
+                  const $IV = Buffer.alloc($N, ...);
+                  ...
+              - pattern-inside: |
+                  let $IV = "...";
+                  ...
+              - pattern-inside: |
+                  let $IV = Buffer.from("...", ...);
+                  ...
+
+  - id: fortify.weak-encryption-stream-cipher
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Weak Encryption: Stream Cipher: RC4, bare ChaCha20 or Salsa20 encrypt without authentication (and
+      RC4 is broken outright), so ciphertext can be flipped bit by bit and keystream reuse reveals the
+      plaintext. Use an AEAD cipher: aes-256-gcm or chacha20-poly1305.
+    metadata:
+      fortify:
+        category: "Weak Encryption: Stream Cipher"
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: An unauthenticated stream cipher is used.
+      cwe: ["CWE-327"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: $F("$ALG", ...)
+          - pattern: $C.$F("$ALG", ...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(createCipheriv|createDecipheriv|createCipher|createDecipher)$
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: (?i)^(rc4(-\d+)?(-hmac-md5)?|arcfour|chacha20|salsa20|xsalsa20)$
+
+  - id: fortify.weak-encryption-non-pqc-resilient-algorithm
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Weak Encryption: Non PQC Resilient Algorithm: RSA, DSA, (EC)DH and elliptic-curve signatures rest
+      on problems a cryptographically relevant quantum computer solves, so data protected today can be
+      decrypted or forged later. Plan the move to ML-KEM / ML-DSA (FIPS 203/204) or hybrid schemes for
+      long-lived data and signatures.
+    metadata:
+      fortify:
+        category: "Weak Encryption: Non PQC Resilient Algorithm"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: A public-key algorithm without post-quantum resistance is used.
+      cwe: ["CWE-327"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $F("$ALG", ...)
+              - pattern: $C.$F("$ALG", ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(generateKeyPair|generateKeyPairSync)$
+          - metavariable-regex:
+              metavariable: $ALG
+              regex: ^(rsa|rsa-pss|ec|ed25519|ed448|x25519|x448|dsa|dh|(ES|RS|PS)\d+|EdDSA|ECDH-ES(\+A\d+KW)?|RSA-OAEP(-\d+)?|RSA1_5)$
+      - pattern: createECDH(...)
+      - pattern: $C.createECDH(...)
+      - pattern: createDiffieHellman(...)
+      - pattern: $C.createDiffieHellman(...)
+      - pattern: createDiffieHellmanGroup(...)
+      - pattern: $C.createDiffieHellmanGroup(...)
+      - pattern: getDiffieHellman(...)
+      - pattern: $C.getDiffieHellman(...)
+      - patterns:
+          - pattern: '$S.generateKey({ ..., name: "$ALG", ... }, ...)'
+          - metavariable-regex:
+              metavariable: $ALG
+              regex: ^(RSA-OAEP|RSA-PSS|RSASSA-PKCS1-v1_5|ECDSA|ECDH|Ed25519|X25519)$
+      - patterns:
+          - pattern-either:
+              - pattern: $F($K, "$ALG", ...)
+              - pattern: $C.$F($K, "$ALG", ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(importJWK|importPKCS8|importSPKI|importX509)$
+          - metavariable-regex:
+              metavariable: $ALG
+              regex: ^((ES|RS|PS)\d+|EdDSA|ECDH-ES(\+A\d+KW)?|RSA-OAEP(-\d+)?|RSA1_5)$
+
+  # ---------------------------------------------------------------- logging
+  - id: fortify.poor-logging-practice-use-of-a-system-output-stream
+    languages: [javascript, typescript]
+    severity: INFO
+    message: >-
+      Poor Logging Practice: Use of a System Output Stream: output goes straight to the console or the
+      process's stdout/stderr, so it cannot be levelled, routed or redacted, and sensitive values end
+      up in whatever captures the terminal. Use the application logger.
+    metadata:
+      fortify:
+        category: "Poor Logging Practice: Use of a System Output Stream"
+        kingdom: Encapsulation
+        impact: "1.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: Output is written directly to the console or a standard stream.
+      cwe: ["CWE-532"]
+      owasp: ["A09:2021 Security Logging and Monitoring Failures"]
+    pattern-either:
+      - patterns:
+          - pattern: console.$M(...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(log|info|warn|error|debug|trace|dir|table)$
+      - pattern: process.stdout.write(...)
+      - pattern: process.stderr.write(...)
+
+  # ---------------------------------------------------------------- React
+  - id: fortify.react-bad-practices-dangerously-set-innerhtml
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      React Bad Practices: Dangerously Set InnerHTML: the element renders raw HTML, bypassing React's
+      escaping, so whatever reaches __html becomes markup and script. Render the data as text, or
+      sanitize it with DOMPurify immediately before it is set.
+    metadata:
+      fortify:
+        category: "React Bad Practices: Dangerously Set InnerHTML"
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A React element renders raw HTML through dangerouslySetInnerHTML.
+      cwe: ["CWE-79"]
+      owasp: ["A03:2021 Injection"]
+    pattern-either:
+      - pattern: '<$EL dangerouslySetInnerHTML={$X} ... />'
+      - pattern: '<$EL dangerouslySetInnerHTML={$X} ... >...</$EL>'
+      - pattern: 'React.createElement($T, { ..., dangerouslySetInnerHTML: $X, ... }, ...)'
+      - pattern: 'createElement($T, { ..., dangerouslySetInnerHTML: $X, ... }, ...)'
+
+  # ---------------------------------------------------------------- code correctness
+  - id: fortify.code-correctness-negative-content-length
+    languages: [javascript, typescript]
+    severity: INFO
+    message: >-
+      Code Correctness: Negative Content-Length: the response declares a negative Content-Length, which
+      is invalid HTTP; servers and proxies drop or desynchronise the connection. Let the framework
+      compute the length, or set the byte length of the body.
+    metadata:
+      fortify:
+        category: "Code Correctness: Negative Content-Length"
+        kingdom: Code Quality
+        impact: "1.0"
+        probability: "2.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A Content-Length header is set to a negative value.
+      cwe: ["CWE-130"]
+      owasp: ["A04:2021 Insecure Design"]
+    patterns:
+      - pattern-either:
+          - pattern: $RES.setHeader("$H", $V)
+          - pattern: $RES.header("$H", $V)
+          - pattern: $RES.set("$H", $V)
+          - pattern: '$RES.writeHead($S, { ..., "$H": $V, ... })'
+          - pattern: '{ ..., headers: { ..., "$H": $V, ... }, ... }'
+      - metavariable-regex:
+          metavariable: $H
+          regex: (?i)^content-length$
+      - metavariable-regex:
+          metavariable: $V
+          regex: ^['"]?-\d+['"]?$
+
+  # ---------------------------------------------------------------- time and state
+  - id: fortify.llm-misconfiguration-unspecified-token-limit
+    languages: [javascript, typescript]
+    severity: INFO
+    message: >-
+      LLM Misconfiguration: Unspecified Token Limit: the completion request sets no maximum output
+      length, so a prompt-injected or runaway generation bills the account for the model's full
+      context and ties up the request. Set max_tokens / maxOutputTokens to what the feature needs.
+    metadata:
+      fortify:
+        category: "LLM Misconfiguration: Unspecified Token Limit"
+        kingdom: API Abuse
+        impact: "2.0"
+        probability: "2.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: An LLM request is sent without a limit on the number of generated tokens.
+      cwe: ["CWE-770"]
+      owasp: ["A04:2021 Insecure Design"]
+    patterns:
+      - pattern-either:
+          - pattern: $C.chat.completions.create({ ... }, ...)
+          - pattern: $C.completions.create({ ... }, ...)
+          - pattern: $C.messages.create({ ... }, ...)
+          - pattern: $C.messages.stream({ ... }, ...)
+          - pattern: $C.responses.create({ ... }, ...)
+          - pattern: $C.beta.messages.create({ ... }, ...)
+          - pattern: $M.generateContent({ ... }, ...)
+          - pattern: $M.generateContentStream({ ... }, ...)
+          - pattern: $M.models.generateContent({ ... }, ...)
+      - pattern-not: '$X.$F({ ..., max_tokens: $N, ... }, ...)'
+      - pattern-not: '$X.$F({ ..., maxTokens: $N, ... }, ...)'
+      - pattern-not: '$X.$F({ ..., max_completion_tokens: $N, ... }, ...)'
+      - pattern-not: '$X.$F({ ..., max_output_tokens: $N, ... }, ...)'
+      - pattern-not: '$X.$F({ ..., maxOutputTokens: $N, ... }, ...)'
+      - pattern-not: '$X.$F({ ..., $K: { ..., maxOutputTokens: $N, ... }, ... }, ...)'
+      - pattern-not: '$X.$F({ ..., $K: { ..., max_output_tokens: $N, ... }, ... }, ...)'
+      - pattern-not: '$X.$F({ ..., $K: { ..., max_tokens: $N, ... }, ... }, ...)'
+
+  # ---------------------------------------------------------------- browser DOM
+  - id: fortify.dynamic-code-evaluation-script-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Dynamic Code Evaluation: Script Injection: a script element is created and its source or body is
+      set from a computed value, so whoever controls that value runs code in the page. Load scripts
+      from a fixed allow-list of URLs (with Subresource Integrity), never from data.
+    metadata:
+      fortify:
+        category: "Dynamic Code Evaluation: Script Injection"
+        kingdom: Input Validation and Representation
+        impact: "4.0"
+        probability: "2.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A dynamically created script element gets a computed src or body.
+      cwe: ["CWE-94", "CWE-829"]
+      owasp: ["A03:2021 Injection"]
+    patterns:
+      - pattern-either:
+          - pattern: $S.src = $X
+          - pattern: $S.text = $X
+          - pattern: $S.textContent = $X
+          - pattern: $S.innerHTML = $X
+          - pattern: $S.setAttribute("src", $X)
+      - pattern-not: $S.$P = "..."
+      - pattern-not: $S.setAttribute("src", "...")
+      - pattern-inside: |
+          $S = document.createElement("script");
+          ...
+
+  - id: fortify.cross-site-scripting-sop-bypass
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Cross-Site Scripting: SOP Bypass: document.domain is set, which relaxes the same-origin policy to
+      the parent domain, so any subdomain that does the same can script this page. The setter is
+      deprecated and ignored by modern browsers; use postMessage between origins instead.
+    metadata:
+      fortify:
+        category: "Cross-Site Scripting: SOP Bypass"
+        kingdom: Input Validation and Representation
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: The page relaxes the same-origin policy by assigning document.domain.
+      cwe: ["CWE-79", "CWE-346"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - pattern: document.domain = $D
+      - pattern: window.document.domain = $D
+
+  - id: fortify.cross-site-scripting-poor-validation
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Cross-Site Scripting: Poor Validation: the value is written as HTML after a URL encoding, escape()
+      or a single replace of '<', none of which neutralises attributes, event handlers or other
+      contexts. Encode for the HTML context (textContent, a templating engine's escaping, or DOMPurify
+      for rich HTML).
+    metadata:
+      fortify:
+        category: "Cross-Site Scripting: Poor Validation"
+        kingdom: Input Validation and Representation
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: HTML output relies on an encoding that does not protect the HTML context.
+      cwe: ["CWE-79", "CWE-116"]
+      owasp: ["A03:2021 Injection"]
+    patterns:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $V
+          - pattern: $EL.outerHTML = $V
+          - pattern: $EL.insertAdjacentHTML($POS, $V)
+          - pattern: document.write($V)
+          - pattern: document.writeln($V)
+          - pattern: $RES.send($V)
+          - pattern: $EL.html($V)
+      - metavariable-pattern:
+          metavariable: $V
+          pattern-either:
+            - pattern: encodeURIComponent(...)
+            - pattern: encodeURI(...)
+            - pattern: escape(...)
+            - pattern: $X.replace("<", ...)
+            - pattern: $X.replace(/</g, ...)
+            - pattern: $X.replace(/</, ...)
+            - pattern: $X.replaceAll("<", ...)
+
+  # ---------------------------------------------------------------- CORS / DNS
+  - id: fortify.setting-manipulation-user-controlled-allow-list
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Setting Manipulation: User-Controlled Allow List: the CORS origin check reflects whatever Origin
+      the request carries (origin: true, or a callback that always accepts), so every site is allowed
+      and, with credentials, any page reads the user's data. Compare the origin against a fixed list.
+    metadata:
+      fortify:
+        category: "Setting Manipulation: User-Controlled Allow List"
+        kingdom: Input Validation and Representation
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: The CORS allow list is the request's own Origin header.
+      cwe: ["CWE-942", "CWE-346"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    pattern-either:
+      - pattern: '{ ..., origin: true, ... }'
+      - pattern: '{ ..., reflectOrigin: true, ... }'
+      - pattern: '{ ..., origin: ($O, $CB) => $CB(null, true), ... }'
+      - pattern: '{ ..., origin: ($O, $CB) => $CB(null, $O), ... }'
+      - pattern: '{ ..., origin: ($O, $CB) => { ... $CB(null, true); ... }, ... }'
+      - pattern: '{ ..., origin: ($O, $CB) => { ... $CB(null, $O); ... }, ... }'
+      - pattern: '{ ..., origin: function ($O, $CB) { ... $CB(null, true); ... }, ... }'
+      - pattern: '{ ..., origin: function ($O, $CB) { ... $CB(null, $O); ... }, ... }'
+      - pattern: '{ ..., origin: ($O, $CB) => $CB(null, $O ?? true), ... }'
+      - pattern: '{ ..., origin: ($O, $CB) => $CB(null, $O || true), ... }'
+      - pattern: '{ ..., origin: ($REQ) => $REQ.headers.origin, ... }'
+      - pattern: '{ ..., origin: ($REQ) => $REQ.header("origin"), ... }'
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", $REQ.headers.origin)
+              - pattern: $RES.header("$H", $REQ.headers.origin)
+              - pattern: $RES.set("$H", $REQ.headers.origin)
+              - pattern: $RES.setHeader("$H", $REQ.get("origin"))
+              - pattern: $RES.setHeader("$H", $REQ.header("origin"))
+              - pattern: $RES.setHeader("$H", $REQ.headers["origin"])
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^access-control-allow-origin$
+
+  - id: fortify.dns-spoofing
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      DNS Spoofing: the code makes a decision on a reverse DNS lookup or on the request's Host header,
+      both of which the client or a spoofed resolver controls. Authenticate the peer (TLS client
+      certificates, signed tokens) instead of trusting a name.
+    metadata:
+      fortify:
+        category: "DNS Spoofing"
+        kingdom: Input Validation and Representation
+        impact: "2.0"
+        probability: "2.0"
+        accuracy: "3.0"
+        confidence: "4.0"
+        abstract: A trust decision depends on a DNS name that can be spoofed.
+      cwe: ["CWE-350", "CWE-807"]
+      owasp: ["A07:2021 Identification and Authentication Failures"]
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $D.reverse(...)
+              - pattern: $D.promises.reverse(...)
+          - metavariable-regex:
+              metavariable: $D
+              regex: ^(dns|dnsPromises|resolver)$
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.hostname == "..."
+              - pattern: $REQ.hostname === "..."
+              - pattern: $REQ.hostname != "..."
+              - pattern: $REQ.hostname !== "..."
+              - pattern: $REQ.hostname.endsWith("...")
+              - pattern: $REQ.headers.host == "..."
+              - pattern: $REQ.headers.host === "..."
+              - pattern: $REQ.headers.host.endsWith("...")
+              - pattern: $L.includes($REQ.hostname)
+              - pattern: $L.includes($REQ.headers.host)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|ctx\.request)$
