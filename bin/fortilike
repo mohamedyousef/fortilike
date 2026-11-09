@@ -1,0 +1,9 @@
+#!/usr/bin/env node
+import { main } from '../src/fortilike.mjs';
+
+try {
+  process.exitCode = main(process.argv.slice(2));
+} catch (error) {
+  process.stderr.write(`fortilike: ${error.message}\n`);
+  process.exitCode = 2;
+}
