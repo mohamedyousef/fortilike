@@ -51,6 +51,12 @@ rules:
               - pattern: $L.defaultsDeep($T, $SINK, ...)
               - pattern: $L.set($T, $SINK, ...)
               - pattern: $L.setWith($T, $SINK, ...)
+          - metavariable-regex:
+              metavariable: $L
+              regex: ^(_|lodash|lodashEs|ld|dot|dotProp|objectPath|setValue)$
+          - focus-metavariable: $SINK
+      - patterns:
+          - pattern-either:
               - pattern: merge($T, $SINK, ...)
               - pattern: deepmerge($T, $SINK, ...)
               - pattern: extend(true, $T, $SINK, ...)
