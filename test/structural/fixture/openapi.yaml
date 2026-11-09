@@ -1,0 +1,14 @@
+openapi: 3.1.0
+info: { title: t, version: '1' }
+components:
+  securitySchemes:
+    basicAuth:
+      # expect: OpenAPI Misconfiguration: Weak Authentication
+      type: http
+      scheme: basic
+paths:
+  /open:
+    get:
+      security: []
+      responses:
+        '200': { description: ok }

@@ -1,0 +1,6 @@
+{
+  "name": "fixture",
+  "dependencies": {
+    "left-pad": "http://example.com/left-pad.tgz"
+  }
+}

@@ -1,0 +1,7 @@
+services:
+  db:
+    environment:
+      # expect: Password Management: Password in Configuration File
+      - POSTGRES_PASSWORD=supersecret123
+      # expect-none
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
