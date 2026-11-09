@@ -1,0 +1,487 @@
+# Security Features: credentials and keys in the code, randomness, cryptography, transport, cookies
+# and privacy. Structural rules: Fortify reports these on the code's shape, without dataflow.
+rules:
+  - id: fortify.password-management-hardcoded-password
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Password Management: Hardcoded Password: $K holds a literal. A credential in the code is in every
+      copy of the program and cannot be rotated without a release. Read it from configuration or a
+      secret store.
+    metadata:
+      fortify:
+        category: "Password Management: Hardcoded Password"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A credential-named variable or property holds a string literal.
+      cwe: ["CWE-259", "CWE-798"]
+      owasp: ["A07:2021 Identification and Authentication Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              { ..., $K: "$V", ... }
+          - pattern: $K = "$V"
+          - pattern: $O.$K = "$V"
+          - pattern: '$F(..., { ..., $K: "$V", ... }, ...)'
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i)^(?!.*(tokenizer|token(s|_?count|_?type|_?kind|_?name|_?field|_?header|_?prefix|_?length|_?ttl|_?expir)|password(Field|Input|Label|Hint|Policy|Rule|Length|Min|Max|Pattern|Strength|Changed|Reset)).*)(.*(password|passwd|pwd|passphrase|secret|api[_-]?key|access[_-]?key|auth[_-]?token|client[_-]?secret|credentials?)|token|accessToken|refreshToken|idToken|sessionKey|privateKey)$
+      - metavariable-regex:
+          metavariable: $V
+          regex: ^(?!\s*$)(?!(?i:bearer|basic|digest|cookie|header|query|body|none|null|undefined|true|false|password|secret|token|string|text|env|file|path|json|hidden|example|placeholder|redacted|\*+|x+|-+|\.+|<[^>]+>)$)(?![a-z][a-z._/-]{0,40}$)(?!(https?|wss?|file)://)(?!/).{4,}$
+
+  - id: fortify.password-management-empty-password
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Password Management: Empty Password: $K is set to the empty string. An empty credential is as
+      good as none; if the field means "not configured", make it absent or undefined instead.
+    metadata:
+      fortify:
+        category: "Password Management: Empty Password"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A credential-named variable or property is the empty string.
+      cwe: ["CWE-258"]
+      owasp: ["A07:2021 Identification and Authentication Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              { ..., $K: "", ... }
+          - pattern: $K = ""
+          - pattern: $O.$K = ""
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i)^.*(password|passwd|pwd|passphrase|client[_-]?secret|api[_-]?key|secret)$
+
+  - id: fortify.password-management-password-in-url
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Password Management: Hardcoded Password: the URL $URL carries user:password credentials. They end
+      up in logs, history and the repository. Take credentials from configuration and send them in a
+      header.
+    metadata:
+      fortify:
+        category: "Password Management: Hardcoded Password"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "4.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A URL literal carries credentials.
+      cwe: ["CWE-798", "CWE-522"]
+      owasp: ["A07:2021 Identification and Authentication Failures"]
+    patterns:
+      - pattern: '"$URL"'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: ^[a-z][a-z0-9+.-]*://[^/\s:@]+:[^@\s/]+@
+
+  - id: fortify.key-management-hardcoded-encryption-key
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Key Management: Hardcoded Encryption Key: a key is written into the code. Anyone with the program
+      has the key, and it cannot be rotated without a release. Load keys from a secret store or key file.
+    metadata:
+      fortify:
+        category: "Key Management: Hardcoded Encryption Key"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A cryptographic API receives a key, IV or secret that is a literal.
+      cwe: ["CWE-321", "CWE-798"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: $C.createCipheriv($A, "$K", ...)
+          - pattern: createCipheriv($A, "$K", ...)
+          - pattern: $C.createDecipheriv($A, "$K", ...)
+          - pattern: createDecipheriv($A, "$K", ...)
+          - pattern: $C.createCipheriv($A, Buffer.from("$K", ...), ...)
+          - pattern: createCipheriv($A, Buffer.from("$K", ...), ...)
+          - pattern: $C.createDecipheriv($A, Buffer.from("$K", ...), ...)
+          - pattern: createDecipheriv($A, Buffer.from("$K", ...), ...)
+          - pattern: $C.createHmac($A, "$K")
+          - pattern: createHmac($A, "$K")
+          - pattern: $C.createSecretKey(Buffer.from("$K", ...))
+          - pattern: createSecretKey(Buffer.from("$K", ...))
+          - pattern: $C.createPrivateKey("$K")
+          - pattern: createPrivateKey("$K")
+          - pattern: $J.sign($P, "$K", ...)
+          - pattern: $J.verify($T, "$K", ...)
+      - metavariable-regex:
+          metavariable: $K
+          regex: ^.{8,}$
+
+  - id: fortify.key-management-hardcoded-private-key
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Key Management: Hardcoded Encryption Key: a PEM private key is in the source tree. Keys belong in
+      a secret store or a key file outside the repository; a test key is made when the tests run.
+    metadata:
+      fortify:
+        category: "Key Management: Hardcoded Encryption Key"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "4.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A PEM-encoded private key is in the source tree.
+      cwe: ["CWE-321", "CWE-798"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern-regex: -----BEGIN (RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----\s*\n\s*[A-Za-z0-9+/=]
+
+  - id: fortify.insecure-randomness
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Insecure Randomness: Math.random is predictable. Fortify reports it wherever it appears, since the
+      value may end up as an id, token or nonce. Use crypto.getRandomValues, crypto.randomUUID or
+      crypto.randomBytes.
+    metadata:
+      fortify:
+        category: Insecure Randomness
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A predictable pseudo-random generator is used.
+      cwe: ["CWE-330", "CWE-338"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern: Math.random()
+
+  - id: fortify.weak-cryptographic-hash
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Weak Cryptographic Hash: $ALG is broken for collision resistance. Use SHA-256 or better; for
+      passwords use scrypt, argon2 or PBKDF2.
+    metadata:
+      fortify:
+        category: Weak Cryptographic Hash
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: MD5, SHA-1 or another broken hash is used.
+      cwe: ["CWE-328", "CWE-327"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: $C.createHash("$ALG", ...)
+          - pattern: createHash("$ALG", ...)
+          - pattern: $C.createHmac("$ALG", ...)
+          - pattern: createHmac("$ALG", ...)
+          - pattern: $S.digest("$ALG", ...)
+          - pattern: '$S.digest({..., name: "$ALG", ...}, ...)'
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: (?i)^(md2|md4|md5|sha-?1|ripemd-?160|rsa-md5|rsa-sha1)$
+
+  - id: fortify.weak-encryption
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Weak Encryption: $ALG is a broken or deprecated cipher. Use AES-256-GCM (or ChaCha20-Poly1305).
+    metadata:
+      fortify:
+        category: Weak Encryption
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A legacy cipher (DES, 3DES, RC2, RC4, Blowfish) is used.
+      cwe: ["CWE-327"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: $C.createCipheriv("$ALG", ...)
+          - pattern: createCipheriv("$ALG", ...)
+          - pattern: $C.createDecipheriv("$ALG", ...)
+          - pattern: createDecipheriv("$ALG", ...)
+          - pattern: $C.createCipher("$ALG", ...)
+          - pattern: createCipher("$ALG", ...)
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: (?i)^(des|des3|des-ede|des-ede3|des-ede3-cbc|des-cbc|rc2|rc4|rc4-40|bf|blowfish|idea|seed|cast5|cast)(-.*)?$
+
+  - id: fortify.weak-encryption-insecure-mode-of-operation
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Weak Encryption: Insecure Mode of Operation: ECB encrypts equal blocks to equal ciphertext, so
+      patterns of the plaintext show through. Use an authenticated mode such as GCM.
+    metadata:
+      fortify:
+        category: "Weak Encryption: Insecure Mode of Operation"
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A block cipher runs in ECB mode.
+      cwe: ["CWE-327"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern: '"$ALG"'
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: (?i)^(aes|camellia|aria)-?\d*-ecb$
+
+  - id: fortify.weak-encryption-missing-required-step
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Weak Encryption: crypto.createCipher derives the key and IV from the password with MD5 and
+      repeats the IV. It is deprecated; use createCipheriv with a random IV and a derived key.
+    metadata:
+      fortify:
+        category: Weak Encryption
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: The deprecated createCipher/createDecipher derive the IV from the password.
+      cwe: ["CWE-327", "CWE-329"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern-either:
+      - pattern: $C.createCipher(...)
+      - pattern: createCipher(...)
+      - pattern: $C.createDecipher(...)
+      - pattern: createDecipher(...)
+
+  - id: fortify.weak-encryption-insufficient-key-size
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Weak Encryption: Insufficient Key Size: an RSA key of $BITS bits. Use 2048 bits or more (3072 for
+      keys that live long).
+    metadata:
+      fortify:
+        category: "Weak Encryption: Insufficient Key Size"
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: An asymmetric key is generated below 2048 bits.
+      cwe: ["CWE-326"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: '$C.generateKeyPair("$T", {..., modulusLength: $BITS, ...}, ...)'
+          - pattern: 'generateKeyPair("$T", {..., modulusLength: $BITS, ...}, ...)'
+          - pattern: '$C.generateKeyPairSync("$T", {..., modulusLength: $BITS, ...})'
+          - pattern: 'generateKeyPairSync("$T", {..., modulusLength: $BITS, ...})'
+      - metavariable-comparison:
+          metavariable: $BITS
+          comparison: $BITS < 2048
+
+  - id: fortify.weak-encryption-inadequate-rsa-padding
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Weak Encryption: Inadequate RSA Padding: PKCS#1 v1.5 padding (or none) is open to padding-oracle
+      attacks. Use RSA_PKCS1_OAEP_PADDING with SHA-256.
+    metadata:
+      fortify:
+        category: "Weak Encryption: Inadequate RSA Padding"
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: RSA encryption uses PKCS#1 v1.5 or no padding.
+      cwe: ["CWE-780"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern-either:
+          - pattern: '$C.publicEncrypt({..., padding: $PAD, ...}, ...)'
+          - pattern: 'publicEncrypt({..., padding: $PAD, ...}, ...)'
+          - pattern: '$C.privateDecrypt({..., padding: $PAD, ...}, ...)'
+          - pattern: 'privateDecrypt({..., padding: $PAD, ...}, ...)'
+      - metavariable-regex:
+          metavariable: $PAD
+          regex: .*(RSA_PKCS1_PADDING|RSA_NO_PADDING)$
+
+  - id: fortify.insecure-ssl-server-identity-verification-disabled
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Insecure SSL: Server Identity Verification Disabled: the TLS client accepts any certificate, so
+      anyone on the path can read and change the traffic. Keep verification on; add the private CA to
+      the trust store (NODE_EXTRA_CA_CERTS or the ca option) instead.
+    metadata:
+      fortify:
+        category: "Insecure SSL: Server Identity Verification Disabled"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: TLS certificate or host-name verification is turned off.
+      cwe: ["CWE-295", "CWE-297"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern-either:
+      - pattern: |
+          { ..., rejectUnauthorized: false, ... }
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+      - pattern: process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
+      - pattern: |
+          { ..., checkServerIdentity: () => undefined, ... }
+      - pattern: |
+          { ..., checkServerIdentity: () => { }, ... }
+      - pattern: |
+          { ..., checkServerIdentity: function (...) { }, ... }
+      - pattern: |
+          { ..., checkServerIdentity: function (...) { return undefined; }, ... }
+
+  - id: fortify.insecure-transport
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Insecure Transport: $URL is a plain-http address, so the traffic can be read and changed on the
+      way. Use https (loopback and reserved test names are not reported).
+    metadata:
+      fortify:
+        category: Insecure Transport
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "4.0"
+        confidence: "3.0"
+        abstract: A URL literal names an http:// or ws:// address that is not loopback.
+      cwe: ["CWE-319"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    patterns:
+      - pattern: '"$URL"'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: ^(http|ws)://(?!(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1?\]|host\.docker\.internal|www\.w3\.org|schemas?\.|json-schema\.org|ns\.adobe\.com|xmlns|purl\.org)([:/]|$))(?![\w.-]+\.(invalid|test|example|localhost|local)([:/]|$))[^\s'"]+
+
+  - id: fortify.cookie-security-httponly-not-set
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Cookie Security: HTTPOnly not Set: the cookie can be read by script, so a cross-site scripting
+      flaw steals it. Set httpOnly (and Secure, SameSite).
+    metadata:
+      fortify:
+        category: "Cookie Security: HTTPOnly not Set"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A cookie is set without the HttpOnly flag.
+      cwe: ["CWE-1004"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: $RES.cookie($N, $V)
+                  - pattern: $RES.cookie($N, $V, $OPTS)
+              - pattern-not: '$RES.cookie($N, $V, {..., httpOnly: true, ...})'
+          - patterns:
+              - pattern-either:
+                  - pattern: $RES.setHeader("$H", "$C")
+                  - pattern: $RES.header("$H", "$C")
+                  - pattern: '$RES.writeHead($S, {..., "$H": "$C", ...})'
+              - metavariable-regex:
+                  metavariable: $H
+                  regex: (?i)^set-cookie$
+              - metavariable-regex:
+                  metavariable: $C
+                  regex: (?i)^(?!.*;\s*httponly).*$
+
+  - id: fortify.cookie-security-cookie-not-sent-over-ssl
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Cookie Security: Cookie not Sent Over SSL: without the Secure flag the cookie travels over plain
+      http too. Set secure (and httpOnly, SameSite).
+    metadata:
+      fortify:
+        category: "Cookie Security: Cookie not Sent Over SSL"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A cookie is set without the Secure flag.
+      cwe: ["CWE-614"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: $RES.cookie($N, $V)
+                  - pattern: $RES.cookie($N, $V, $OPTS)
+              - pattern-not: '$RES.cookie($N, $V, {..., secure: true, ...})'
+          - patterns:
+              - pattern-either:
+                  - pattern: $RES.setHeader("$H", "$C")
+                  - pattern: $RES.header("$H", "$C")
+                  - pattern: '$RES.writeHead($S, {..., "$H": "$C", ...})'
+              - metavariable-regex:
+                  metavariable: $H
+                  regex: (?i)^set-cookie$
+              - metavariable-regex:
+                  metavariable: $C
+                  regex: (?i)^(?!.*;\s*secure).*$
+
+  - id: fortify.privacy-violation
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Privacy Violation: $X looks like a credential or personal data and is written to the console, a
+      log, or web storage. Keep secrets and personal data out of logs; keep tokens out of localStorage.
+    metadata:
+      fortify:
+        category: Privacy Violation
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A credential or personal data is logged or stored where it does not belong.
+      cwe: ["CWE-359", "CWE-532"]
+      owasp: ["A09:2021 Security Logging and Monitoring Failures"]
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: console.$M(..., $X, ...)
+                  - pattern: console.$M(..., $O.$X, ...)
+                  - pattern: $LOG.$M(..., $X, ...)
+                  - pattern: $LOG.$M(..., $O.$X, ...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(log|info|warn|error|debug|trace|verbose)$
+          - patterns:
+              - pattern-either:
+                  - pattern: localStorage.setItem($K, $X)
+                  - pattern: localStorage.setItem($K, $O.$X)
+                  - pattern: sessionStorage.setItem($K, $X)
+                  - pattern: sessionStorage.setItem($K, $O.$X)
+                  - pattern: localStorage.setItem("$X", $V)
+                  - pattern: sessionStorage.setItem("$X", $V)
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i)^(password|passwd|pwd|passphrase|secret|clientSecret|client_secret|apiKey|api_key|accessToken|access_token|refreshToken|refresh_token|idToken|id_token|token|authToken|auth_token|sessionKey|session_key|privateKey|private_key|credentials?|authorization|cookie|ssn|socialSecurity\w*|creditCard\w*|cardNumber|cvv|iban|passport\w*|nationalId|badgeNumber|dateOfBirth|dob)$
