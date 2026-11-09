@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { buildProgram, dataflowInstanceId, globalDataflow, loadTypescript } from './dataflow.mjs';
 import { openapiScan } from './openapi.mjs';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 const RULES_DIR = join(ROOT, 'rules');

@@ -1,7 +1,7 @@
 {
   "name": "fortilike",
-  "version": "0.1.0",
-  "description": "A Fortify-like static analysis for JavaScript and TypeScript: Fortify's categories, kingdoms and priority order, dataflow traces, and a Developer-Workbook-style report, on Semgrep's open engine.",
+  "version": "0.2.0",
+  "description": "A Fortify-like static analysis for JavaScript and TypeScript: Fortify 26.4 categories, kingdoms and priority order, global dataflow across files on the TypeScript compiler, configuration and OpenAPI rules, and a Developer-Workbook-style report.",
   "license": "UNLICENSED",
   "private": true,
   "type": "module",
