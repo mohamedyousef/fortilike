@@ -1,0 +1,181 @@
+# More Security Features rules: tokens, TLS protocol versions, cookie lifetime, uploads, salts and keys.
+rules:
+  - id: fortify.json-web-token-missing-signature-check
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      JSON Web Token: Missing Signature Check: the token's claims are read without verifying its
+      signature (decode instead of verify, or the "none" algorithm allowed), so anyone can mint a
+      token. Use verify with the expected algorithms.
+    metadata:
+      fortify:
+        category: "JSON Web Token: Missing Signature Check"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "4.0"
+        abstract: A JWT is trusted without its signature being checked.
+      cwe: ["CWE-347"]
+      owasp: ["A07:2021 Identification and Authentication Failures"]
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $J.decode($T, ...)
+              - pattern: '$J.verify($T, $K, { ..., algorithms: [..., "none", ...], ... }, ...)'
+              - pattern: '$J.verify($T, $K, { ..., algorithms: [..., "NONE", ...], ... }, ...)'
+          - metavariable-regex:
+              metavariable: $J
+              regex: (?i)^(jwt|jsonwebtoken|jose|njwt|jws)$
+      - pattern: jwt_decode($T, ...)
+      - pattern: jwtDecode($T, ...)
+      - pattern: decodeJwt($T, ...)
+
+  - id: fortify.insecure-transport-weak-ssl-protocol
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Insecure Transport: Weak SSL Protocol: the connection allows SSLv3, TLS 1.0 or TLS 1.1, which
+      are broken. Set minVersion to TLSv1.2 (or leave Node's default).
+    metadata:
+      fortify:
+        category: "Insecure Transport: Weak SSL Protocol"
+        kingdom: Security Features
+        impact: "3.0"
+        probability: "2.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A TLS client or server is configured to accept a broken protocol version.
+      cwe: ["CWE-326", "CWE-327"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern-either:
+      - patterns:
+          - pattern: '{ ..., secureProtocol: "$P", ... }'
+          - metavariable-regex:
+              metavariable: $P
+              regex: ^(SSLv2|SSLv3|SSLv23|TLSv1|TLSv1_1)_?(method|client_method|server_method)?$
+      - patterns:
+          - pattern: '{ ..., minVersion: "$V", ... }'
+          - metavariable-regex:
+              metavariable: $V
+              regex: ^(SSLv3|TLSv1|TLSv1\.1)$
+
+  - id: fortify.cookie-security-persistent-cookie
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Cookie Security: Persistent Cookie: the cookie lives longer than a year, so a stolen or shared
+      browser keeps the session long after the person left. Keep session cookies short-lived.
+    metadata:
+      fortify:
+        category: "Cookie Security: Persistent Cookie"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: A cookie is set to live for more than a year.
+      cwe: ["CWE-539"]
+      owasp: ["A05:2021 Security Misconfiguration"]
+    patterns:
+      - pattern: '$RES.cookie($N, $V, { ..., maxAge: $MS, ... })'
+      - metavariable-comparison:
+          metavariable: $MS
+          comparison: $MS > 31536000000
+
+  - id: fortify.often-misused-file-upload
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Often Misused: File Upload: multer accepts uploads with no size or count limits, so a client
+      fills the disk or memory. Set limits (fileSize, files) and a fileFilter.
+    metadata:
+      fortify:
+        category: "Often Misused: File Upload"
+        kingdom: API Abuse
+        impact: "4.0"
+        probability: "2.0"
+        accuracy: "4.0"
+        confidence: "5.0"
+        abstract: An upload handler has no size or count limit.
+      cwe: ["CWE-434", "CWE-400"]
+      owasp: ["A04:2021 Insecure Design"]
+    pattern-either:
+      - pattern: multer()
+      - patterns:
+          - pattern: multer({ ... })
+          - pattern-not: 'multer({ ..., limits: $L, ... })'
+
+  - id: fortify.weak-cryptographic-hash-hardcoded-salt
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Weak Cryptographic Hash: Hardcoded Salt: every password is hashed with the same literal salt, so
+      one rainbow table covers them all. Draw a random salt per password and store it with the hash.
+    metadata:
+      fortify:
+        category: "Weak Cryptographic Hash: Hardcoded Salt"
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "4.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A key-derivation call uses a literal salt.
+      cwe: ["CWE-760"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern-either:
+      - pattern: $C.pbkdf2($P, "$SALT", ...)
+      - pattern: pbkdf2($P, "$SALT", ...)
+      - pattern: $C.pbkdf2Sync($P, "$SALT", ...)
+      - pattern: pbkdf2Sync($P, "$SALT", ...)
+      - pattern: $C.scrypt($P, "$SALT", ...)
+      - pattern: scrypt($P, "$SALT", ...)
+      - pattern: $C.scryptSync($P, "$SALT", ...)
+      - pattern: scryptSync($P, "$SALT", ...)
+      - pattern: $C.pbkdf2Sync($P, Buffer.from("$SALT", ...), ...)
+      - pattern: $C.scryptSync($P, Buffer.from("$SALT", ...), ...)
+
+  - id: fortify.key-management-empty-encryption-key
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Key Management: Empty Encryption Key: the cipher or HMAC is keyed with an empty string, which
+      protects nothing. Load a key from a secret store.
+    metadata:
+      fortify:
+        category: "Key Management: Empty Encryption Key"
+        kingdom: Security Features
+        impact: "4.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A cryptographic API receives an empty key.
+      cwe: ["CWE-321"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern-either:
+      - pattern: $C.createCipheriv($A, "", ...)
+      - pattern: createCipheriv($A, "", ...)
+      - pattern: $C.createHmac($A, "")
+      - pattern: createHmac($A, "")
+      - pattern: $J.sign($P, "", ...)
+
+  - id: fortify.insecure-randomness-pseudo-random-bytes
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Insecure Randomness: crypto.pseudoRandomBytes is deprecated and not cryptographically strong.
+      Use crypto.randomBytes.
+    metadata:
+      fortify:
+        category: Insecure Randomness
+        kingdom: Security Features
+        impact: "2.0"
+        probability: "3.0"
+        accuracy: "5.0"
+        confidence: "5.0"
+        abstract: A deprecated non-cryptographic random source is used.
+      cwe: ["CWE-338"]
+      owasp: ["A02:2021 Cryptographic Failures"]
+    pattern-either:
+      - pattern: $C.pseudoRandomBytes(...)
+      - pattern: pseudoRandomBytes(...)
