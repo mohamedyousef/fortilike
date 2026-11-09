@@ -1,0 +1,786 @@
+{
+  "_about": "Fortify category names with their kingdom (Seven Pernicious Kingdoms), the CWE ids they map to, and the Impact / Probability / Accuracy / Confidence values this tool uses to compute the Fortify Priority Order. The names and kingdoms follow OpenText's public taxonomy; the numbers are this tool's calibration, chosen to land each category where Fortify usually does.",
+  "kingdoms": [
+    "Input Validation and Representation",
+    "API Abuse",
+    "Security Features",
+    "Time and State",
+    "Errors",
+    "Code Quality",
+    "Encapsulation",
+    "Environment"
+  ],
+  "categories": {
+    "Path Manipulation": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-22",
+        "CWE-73"
+      ],
+      "impact": 4.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Command Injection": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-78",
+        "CWE-77"
+      ],
+      "impact": 5.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Server-Side Request Forgery": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-918"
+      ],
+      "impact": 4.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Open Redirect": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-601"
+      ],
+      "impact": 3.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Header Manipulation": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-113"
+      ],
+      "impact": 2.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Cross-Site Scripting: Reflected": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-79"
+      ],
+      "impact": 3.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Cross-Site Scripting: DOM": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-79"
+      ],
+      "impact": 3.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Cross-Site Scripting: Persistent": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-79"
+      ],
+      "impact": 3.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Log Forging": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-117"
+      ],
+      "impact": 2.0,
+      "probability": 4.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Denial of Service: Regular Expression": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-1333",
+        "CWE-400"
+      ],
+      "impact": 3.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Denial of Service": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-400"
+      ],
+      "impact": 3.0,
+      "probability": 2.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Dynamic Code Evaluation: Code Injection": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-94",
+        "CWE-95"
+      ],
+      "impact": 5.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Dynamic Code Evaluation: Unsafe Deserialization": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-502"
+      ],
+      "impact": 5.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "SQL Injection": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-89"
+      ],
+      "impact": 5.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "NoSQL Injection": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-943"
+      ],
+      "impact": 5.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Resource Injection": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-99"
+      ],
+      "impact": 3.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Setting Manipulation": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-15"
+      ],
+      "impact": 3.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Prototype Pollution": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-1321"
+      ],
+      "impact": 4.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "XML External Entity Injection": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-611"
+      ],
+      "impact": 4.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Mass Assignment": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-915"
+      ],
+      "impact": 3.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "JSON Injection": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-91"
+      ],
+      "impact": 3.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Dangerous Function": {
+      "kingdom": "API Abuse",
+      "cwe": [
+        "CWE-676"
+      ],
+      "impact": 2.0,
+      "probability": 2.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Often Misused: File Upload": {
+      "kingdom": "API Abuse",
+      "cwe": [
+        "CWE-434"
+      ],
+      "impact": 4.0,
+      "probability": 2.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Password Management: Hardcoded Password": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-259",
+        "CWE-798"
+      ],
+      "impact": 4.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Password Management: Empty Password": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-258"
+      ],
+      "impact": 2.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Password Management: Password in Comment": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-615"
+      ],
+      "impact": 2.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Password Management: Password in Configuration File": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-260"
+      ],
+      "impact": 4.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Key Management: Hardcoded Encryption Key": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-321",
+        "CWE-798"
+      ],
+      "impact": 4.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Insecure Randomness": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-330",
+        "CWE-338"
+      ],
+      "impact": 2.0,
+      "probability": 3.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Weak Cryptographic Hash": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-328",
+        "CWE-327"
+      ],
+      "impact": 2.0,
+      "probability": 4.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Weak Encryption": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-327"
+      ],
+      "impact": 3.0,
+      "probability": 2.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Weak Encryption: Insecure Mode of Operation": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-327"
+      ],
+      "impact": 3.0,
+      "probability": 2.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Weak Encryption: Insufficient Key Size": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-326"
+      ],
+      "impact": 3.0,
+      "probability": 2.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Weak Encryption: Inadequate RSA Padding": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-780"
+      ],
+      "impact": 3.0,
+      "probability": 2.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Insecure SSL: Server Identity Verification Disabled": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-295",
+        "CWE-297"
+      ],
+      "impact": 4.0,
+      "probability": 2.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Insecure Transport": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-319"
+      ],
+      "impact": 2.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 3.0
+    },
+    "Cookie Security: HTTPOnly not Set": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-1004"
+      ],
+      "impact": 2.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Cookie Security: Cookie not Sent Over SSL": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-614"
+      ],
+      "impact": 2.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Cookie Security: Overly Broad Domain": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-1004"
+      ],
+      "impact": 2.0,
+      "probability": 2.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Privacy Violation": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-359",
+        "CWE-532"
+      ],
+      "impact": 3.0,
+      "probability": 2.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Privacy Violation: Autocomplete": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-525"
+      ],
+      "impact": 1.0,
+      "probability": 2.0,
+      "accuracy": 5.0,
+      "confidence": 4.0
+    },
+    "HTML5: Overly Permissive Message Posting Policy": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-942"
+      ],
+      "impact": 2.0,
+      "probability": 4.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "HTML5: Overly Permissive CORS Policy": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-942"
+      ],
+      "impact": 2.0,
+      "probability": 4.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "HTML5: Overly Permissive Content Security Policy": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-1021"
+      ],
+      "impact": 2.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Access Control: Authorization Bypass": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-285",
+        "CWE-639"
+      ],
+      "impact": 4.0,
+      "probability": 3.0,
+      "accuracy": 3.0,
+      "confidence": 4.0
+    },
+    "Cross-Site Request Forgery": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-352"
+      ],
+      "impact": 3.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "JSON Web Token: Missing Signature Check": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-347"
+      ],
+      "impact": 4.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Race Condition: File System Access": {
+      "kingdom": "Time and State",
+      "cwe": [
+        "CWE-367"
+      ],
+      "impact": 2.0,
+      "probability": 1.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Insecure Temporary File": {
+      "kingdom": "Time and State",
+      "cwe": [
+        "CWE-377"
+      ],
+      "impact": 2.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Session Fixation": {
+      "kingdom": "Time and State",
+      "cwe": [
+        "CWE-384"
+      ],
+      "impact": 3.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Poor Error Handling: Empty Catch Block": {
+      "kingdom": "Errors",
+      "cwe": [
+        "CWE-390"
+      ],
+      "impact": 1.0,
+      "probability": 2.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Poor Error Handling: Overly Broad Catch": {
+      "kingdom": "Errors",
+      "cwe": [
+        "CWE-396"
+      ],
+      "impact": 1.0,
+      "probability": 2.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "System Information Leak: External": {
+      "kingdom": "Encapsulation",
+      "cwe": [
+        "CWE-209",
+        "CWE-497"
+      ],
+      "impact": 2.0,
+      "probability": 4.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "System Information Leak: Internal": {
+      "kingdom": "Encapsulation",
+      "cwe": [
+        "CWE-209",
+        "CWE-532"
+      ],
+      "impact": 1.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "System Information Leak": {
+      "kingdom": "Encapsulation",
+      "cwe": [
+        "CWE-200"
+      ],
+      "impact": 2.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Trust Boundary Violation": {
+      "kingdom": "Encapsulation",
+      "cwe": [
+        "CWE-501"
+      ],
+      "impact": 2.0,
+      "probability": 3.0,
+      "accuracy": 3.0,
+      "confidence": 4.0
+    },
+    "Dockerfile Misconfiguration": {
+      "kingdom": "Environment",
+      "cwe": [
+        "CWE-250"
+      ],
+      "impact": 2.0,
+      "probability": 3.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Build Misconfiguration": {
+      "kingdom": "Environment",
+      "cwe": [
+        "CWE-829",
+        "CWE-494"
+      ],
+      "impact": 3.0,
+      "probability": 2.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Insecure Deployment": {
+      "kingdom": "Environment",
+      "cwe": [
+        "CWE-16"
+      ],
+      "impact": 2.0,
+      "probability": 2.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Code Correctness": {
+      "kingdom": "Code Quality",
+      "cwe": [
+        "CWE-398"
+      ],
+      "impact": 1.0,
+      "probability": 2.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Unreleased Resource": {
+      "kingdom": "Code Quality",
+      "cwe": [
+        "CWE-772"
+      ],
+      "impact": 1.0,
+      "probability": 2.0,
+      "accuracy": 4.0,
+      "confidence": 4.0
+    },
+    "Dangerous File Inclusion": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-98",
+        "CWE-829"
+      ],
+      "impact": 5.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Server-Side Template Injection": {
+      "kingdom": "Input Validation and Representation",
+      "cwe": [
+        "CWE-1336"
+      ],
+      "impact": 5.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Access Control: Database": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-639",
+        "CWE-566"
+      ],
+      "impact": 4.0,
+      "probability": 3.0,
+      "accuracy": 3.0,
+      "confidence": 4.0
+    },
+    "Insecure Transport: Weak SSL Protocol": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-326"
+      ],
+      "impact": 3.0,
+      "probability": 2.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Cookie Security: Persistent Cookie": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-539"
+      ],
+      "impact": 2.0,
+      "probability": 3.0,
+      "accuracy": 4.0,
+      "confidence": 5.0
+    },
+    "Weak Cryptographic Hash: Hardcoded Salt": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-760"
+      ],
+      "impact": 2.0,
+      "probability": 4.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    },
+    "Key Management: Empty Encryption Key": {
+      "kingdom": "Security Features",
+      "cwe": [
+        "CWE-321"
+      ],
+      "impact": 4.0,
+      "probability": 3.0,
+      "accuracy": 5.0,
+      "confidence": 5.0
+    }
+  },
+  "cwe_to_category": {
+    "CWE-22": "Path Manipulation",
+    "CWE-23": "Path Manipulation",
+    "CWE-73": "Path Manipulation",
+    "CWE-78": "Command Injection",
+    "CWE-77": "Command Injection",
+    "CWE-918": "Server-Side Request Forgery",
+    "CWE-601": "Open Redirect",
+    "CWE-113": "Header Manipulation",
+    "CWE-79": "Cross-Site Scripting: Reflected",
+    "CWE-80": "Cross-Site Scripting: Reflected",
+    "CWE-117": "Log Forging",
+    "CWE-1333": "Denial of Service: Regular Expression",
+    "CWE-400": "Denial of Service",
+    "CWE-94": "Dynamic Code Evaluation: Code Injection",
+    "CWE-95": "Dynamic Code Evaluation: Code Injection",
+    "CWE-502": "Dynamic Code Evaluation: Unsafe Deserialization",
+    "CWE-89": "SQL Injection",
+    "CWE-943": "NoSQL Injection",
+    "CWE-99": "Resource Injection",
+    "CWE-15": "Setting Manipulation",
+    "CWE-1321": "Prototype Pollution",
+    "CWE-611": "XML External Entity Injection",
+    "CWE-915": "Mass Assignment",
+    "CWE-91": "JSON Injection",
+    "CWE-676": "Dangerous Function",
+    "CWE-434": "Often Misused: File Upload",
+    "CWE-259": "Password Management: Hardcoded Password",
+    "CWE-798": "Password Management: Hardcoded Password",
+    "CWE-258": "Password Management: Empty Password",
+    "CWE-615": "Password Management: Password in Comment",
+    "CWE-260": "Password Management: Password in Configuration File",
+    "CWE-321": "Key Management: Hardcoded Encryption Key",
+    "CWE-330": "Insecure Randomness",
+    "CWE-338": "Insecure Randomness",
+    "CWE-328": "Weak Cryptographic Hash",
+    "CWE-916": "Weak Cryptographic Hash",
+    "CWE-327": "Weak Encryption",
+    "CWE-326": "Weak Encryption: Insufficient Key Size",
+    "CWE-780": "Weak Encryption: Inadequate RSA Padding",
+    "CWE-295": "Insecure SSL: Server Identity Verification Disabled",
+    "CWE-297": "Insecure SSL: Server Identity Verification Disabled",
+    "CWE-319": "Insecure Transport",
+    "CWE-1004": "Cookie Security: HTTPOnly not Set",
+    "CWE-614": "Cookie Security: Cookie not Sent Over SSL",
+    "CWE-359": "Privacy Violation",
+    "CWE-532": "Privacy Violation",
+    "CWE-525": "Privacy Violation: Autocomplete",
+    "CWE-942": "HTML5: Overly Permissive CORS Policy",
+    "CWE-1021": "HTML5: Overly Permissive Content Security Policy",
+    "CWE-285": "Access Control: Authorization Bypass",
+    "CWE-639": "Access Control: Authorization Bypass",
+    "CWE-352": "Cross-Site Request Forgery",
+    "CWE-347": "JSON Web Token: Missing Signature Check",
+    "CWE-367": "Race Condition: File System Access",
+    "CWE-377": "Insecure Temporary File",
+    "CWE-384": "Session Fixation",
+    "CWE-390": "Poor Error Handling: Empty Catch Block",
+    "CWE-396": "Poor Error Handling: Overly Broad Catch",
+    "CWE-209": "System Information Leak: External",
+    "CWE-497": "System Information Leak: External",
+    "CWE-200": "System Information Leak",
+    "CWE-501": "Trust Boundary Violation",
+    "CWE-250": "Dockerfile Misconfiguration",
+    "CWE-829": "Build Misconfiguration",
+    "CWE-494": "Build Misconfiguration",
+    "CWE-16": "Insecure Deployment",
+    "CWE-398": "Code Correctness",
+    "CWE-772": "Unreleased Resource",
+    "CWE-98": "Dangerous File Inclusion",
+    "CWE-1336": "Server-Side Template Injection",
+    "CWE-566": "Access Control: Database",
+    "CWE-760": "Weak Cryptographic Hash: Hardcoded Salt",
+    "CWE-539": "Cookie Security: Persistent Cookie"
+  }
+}
